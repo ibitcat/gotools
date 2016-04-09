@@ -78,8 +78,6 @@ func StraightSelectSort(t []int) {
 		if small != i {
 			t[i], t[small] = t[small], t[i]
 		}
-
-		fmt.Println("----", t, i)
 	}
 }
 
