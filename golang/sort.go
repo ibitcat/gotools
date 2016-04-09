@@ -65,8 +65,22 @@ func QuickSort(t []int) {
 
 // 直接选择排序
 // 不稳定
-func StraightSelectSort() {
+func StraightSelectSort(t []int) {
+	l := len(t)
+	for i := 0; i < l-1; i++ {
+		small := i
+		for j := i + 1; j < l; j++ {
+			if t[j] < t[small] { // 记录索引
+				small = j
+			}
+		}
 
+		if small != i {
+			t[i], t[small] = t[small], t[i]
+		}
+
+		fmt.Println("----", t, i)
+	}
 }
 
 func main() {
@@ -74,7 +88,12 @@ func main() {
 	t := []int{1, 2, 5, 4, 3}
 	BubbleSort(t, true)
 	fmt.Println(t)
+
 	t1 := []int{7, 2, 5, 4, 3}
 	QuickSort(t1)
 	fmt.Println(t1)
+
+	t2 := []int{5, 2, 3, 7, 9, 1}
+	StraightSelectSort(t2)
+	fmt.Println(t2)
 }
