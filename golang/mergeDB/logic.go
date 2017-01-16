@@ -346,7 +346,7 @@ forLabel:
 
 	// 打印合并结构
 	for tbName, res := range this.mergeRes {
-		fmt.Printf("合并结果：表=[%s],err=%s,num=%d\n", tbName, res.Res, res.Num)
+		fmt.Printf("合并结果：表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
 	}
 }
 

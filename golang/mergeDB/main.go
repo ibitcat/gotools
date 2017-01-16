@@ -106,7 +106,7 @@ func main() {
 			// 打印清理结果
 			fmt.Printf("[%s]数据库清理完毕\n", db.Name)
 			for tbName, res := range db.clearRes {
-				fmt.Printf("清理结果：表=[%s],err=%s,num=%d\n", tbName, res.Res, res.Num)
+				fmt.Printf("清理结果：表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
 			}
 		}
 	}

@@ -42,5 +42,6 @@ func LoadJson() bool {
 			return false
 		}
 	}
+	//fmt.Printf("%+v\n", conf)
 	return true
 }
