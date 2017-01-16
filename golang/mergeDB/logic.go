@@ -155,7 +155,7 @@ func (this *DataBase) FindAndClear() {
 	defer func() {
 		if err := recover(); err != nil {
 			this.ClearOk = false
-			fmt.Printf("Error:[%s]数据库清理错误，err=%s\n", this.Name, err)
+			fmt.Printf("[%s]数据库清理错误，err=%s\n", this.Name, err)
 		}
 		wg.Done()
 	}()
