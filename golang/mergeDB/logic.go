@@ -39,7 +39,7 @@ type Table struct {
 }
 
 func InitDB(dbName string) *DataBase {
-	dsn := fmt.Sprintf("root:123456@tcp(127.0.0.1:3306)/%s", dbName)
+	dsn := fmt.Sprintf("root:123456@tcp(%s)/%s", conf.Address, dbName)
 	db, err := sql.Open("mysql", dsn)
 	checkError(err)
 	err = db.Ping()

@@ -1,5 +1,6 @@
 {
 	"worker":2,
+	"address":"127.0.0.1:3306",
 	"master_db":"domi_temp",
 	"slave_db":[
 		"domi_temp2"
