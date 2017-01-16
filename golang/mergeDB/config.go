@@ -8,8 +8,10 @@ import (
 )
 
 type Config struct {
-	Worker   int             //工作线程数量
+	User     string          //数据库用户名
+	Password string          //数据库密码
 	Address  string          //数据库地址
+	Worker   int             //工作线程数量
 	MasterDb string          `json:"master_db"`
 	SlaveDb  []string        `json:"slave_db"`
 	Exclude  []string        //不需要合并的表
