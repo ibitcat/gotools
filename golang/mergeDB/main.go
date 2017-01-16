@@ -94,6 +94,7 @@ func main() {
 	fmt.Println("---------------- clean db start ----------------")
 	wg.Add(len(GameDbMap))
 	for _, db := range GameDbMap {
+		fmt.Println("开始清理数据库,DB = ", db.Name)
 		go db.FindAndClear()
 	}
 	wg.Wait()
@@ -101,6 +102,12 @@ func main() {
 		if !db.ClearOk {
 			fmt.Printf("Error：[%s]数据库未清理完成\n", db.Name)
 			return
+		} else {
+			// 打印清理结果
+			fmt.Printf("[%s]数据库清理完毕\n", db.Name)
+			for tbName, res := range db.clearRes {
+				fmt.Printf("清理结果：表=[%s],err=%s,num=%d\n", tbName, res.Res, res.Num)
+			}
 		}
 	}
 	fmt.Println("---------------- clean db end ----------------")
