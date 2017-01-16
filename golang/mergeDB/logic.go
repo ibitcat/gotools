@@ -328,6 +328,9 @@ forLabel:
 func (this *DataBase) checkAndMerge(dbSlave *DataBase, tbName string) {
 	tbMaster := this.Tables[tbName]
 	tbSlave := dbSlave.Tables[tbName]
+	master, slave := this.Name, dbSlave.Name
+	fmt.Printf("开始合并[%s.%s] <-- [%s.%s]\n", master, tbName, slave, tbName)
+
 	if len(tbMaster.Fields) != len(tbSlave.Fields) {
 		panic("两个表的字段数量不一致")
 	}
@@ -371,7 +374,6 @@ func (this *DataBase) checkAndMerge(dbSlave *DataBase, tbName string) {
 	*/
 
 	// 开始合并
-	master, slave := this.Name, dbSlave.Name
 	sql := fmt.Sprintf("insert into %s.%s select * from %s.%s", master, tbName, slave, tbName)
 	//fmt.Println(sql)
 	res, insertErr := this.Conn.Exec(sql)
