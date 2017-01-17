@@ -12,9 +12,9 @@ var GameDbMap map[string]*DataBase
 
 // 获取当天凌晨时间戳
 func GetTodayZeroTime() int64 {
-	t := time.Unix(1484134400, 0)
-	year, month, day := t.Date()
-	t = time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+	//t := time.Unix(1484134400, 0)
+	year, month, day := time.Now().Date()
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
 
 	return t.Unix()
 }
@@ -93,6 +93,7 @@ func main() {
 	// 查找每个库的无用数据并删除
 	fmt.Println("---------------- clean db start ----------------")
 	wg.Add(len(GameDbMap))
+	startTime := time.Now()
 	for _, db := range GameDbMap {
 		fmt.Println("开始清理数据库,DB = ", db.Name)
 		go db.FindAndClear()
@@ -104,21 +105,23 @@ func main() {
 			return
 		} else {
 			// 打印清理结果
-			fmt.Printf("[%s]数据库清理完毕\n", db.Name)
+			fmt.Printf("【%s】数据库清理完毕，共清理【%d】个表\n", db.Name, len(db.clearRes))
 			for tbName, res := range db.clearRes {
 				fmt.Printf("清理结果：表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
 			}
 		}
 	}
 	fmt.Println("---------------- clean db end ----------------")
+	fmt.Printf("清理耗时=%d 毫秒 ！\n", (time.Now().Sub(startTime).Nanoseconds())/1e6)
 	fmt.Println()
 
 	// 合并数据
 	fmt.Println("---------------- merge db start ----------------")
 	for _, name := range conf.SlaveDb {
-		fmt.Printf("merge [%s]-[%s]: \n", conf.MasterDb, name)
+		fmt.Printf("merge [%s]-[%s] begin: \n", conf.MasterDb, name)
+		startTime = time.Now()
 		Merge(conf.MasterDb, name)
-		fmt.Printf("merge [%s]-[%s] ok!!!\n\n", conf.MasterDb, name)
+		fmt.Printf("merge [%s]-[%s] end , 耗时 = %d 毫秒 !\n\n", conf.MasterDb, name, (time.Now().Sub(startTime).Nanoseconds())/1e6)
 	}
 	fmt.Println("---------------- merge db end ----------------")
 }

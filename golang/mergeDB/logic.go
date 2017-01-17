@@ -8,8 +8,10 @@ import (
 )
 
 type Result struct {
-	Res string
-	Num int
+	Res    string //错误信息
+	Num    int    //结果条数
+	TbName string //表名
+	Idx    int    //表索引
 }
 
 // 数据库
@@ -17,8 +19,9 @@ type DataBase struct {
 	Name    string           // 数据库名称
 	Conn    *sql.DB          // 数据库连接
 	Tables  map[string]Table // 数据库中所有的表
-	ClearOk bool             // 数据库是否清理成功
-	C       chan int         // channel
+	ClearOk bool             // 数据库是否全部清理成功
+	MergeOk bool             // 数据库是否全部合并成功
+	C       chan Result      // channel
 
 	// 私有
 	queue    []string          // goroutine处理队列
@@ -45,9 +48,9 @@ func InitDB(dbName string) *DataBase {
 	err = db.Ping()
 	checkError(err)
 
-	gameDB := DataBase{Name: dbName, Conn: db, ClearOk: true}
+	gameDB := DataBase{Name: dbName, Conn: db, ClearOk: false, MergeOk: false}
 	gameDB.Tables = make(map[string]Table, 100)
-	gameDB.C = make(chan int, conf.Worker)
+	gameDB.C = make(chan Result, conf.Worker)
 
 	gameDB.clearRes = make(map[string]Result, 100)
 	gameDB.mergeRes = make(map[string]Result, 100)
@@ -154,7 +157,6 @@ func (this *DataBase) ParseTable(tbName string) {
 func (this *DataBase) FindAndClear() {
 	defer func() {
 		if err := recover(); err != nil {
-			this.ClearOk = false
 			fmt.Printf("[%s]数据库清理错误，err=%s\n", this.Name, err)
 		}
 		wg.Done()
@@ -182,22 +184,24 @@ func (this *DataBase) FindAndClear() {
 		if num >= conf.Worker {
 			num = conf.Worker
 		}
-		for i := 0; i < num; i++ {
-			go this.ClearByIdx(this.index)
-			this.index++
+		var i int
+		for i = 0; i < num; i++ {
+			go this.ClearByIdx(i, this.queue[i])
 		}
+		this.index = i
 
 	forLabel:
 		for {
 			select {
-			case idx := <-this.C:
-				this.schedule[idx] = 1
+			case res := <-this.C:
+				this.clearRes[res.TbName] = res
+				this.schedule[res.Idx] = 1
 				if len(this.schedule) >= len(this.queue) {
-
 					break forLabel
 				} else {
 					if this.index < len(this.queue) {
-						go this.ClearByIdx(this.index)
+						tbName := this.queue[this.index]
+						go this.ClearByIdx(this.index, tbName)
 						this.index++
 					}
 				}
@@ -209,8 +213,9 @@ func (this *DataBase) FindAndClear() {
 
 		// 最后清player表
 		resNum := this.clear("player")
-		this.clearRes["player"] = Result{"OK", resNum}
+		this.clearRes["player"] = Result{Res: "OK", Num: resNum}
 	}
+	this.ClearOk = true
 }
 
 func (this *DataBase) clear(tbName string) int {
@@ -225,20 +230,18 @@ func (this *DataBase) clear(tbName string) int {
 }
 
 // 开始清除每个库的无用数据
-func (this *DataBase) ClearByIdx(tbIdx int) {
+func (this *DataBase) ClearByIdx(tbIdx int, tbName string) {
+	var num int = 0
 	// 每个goroutine捕获自己的panic
 	defer func() {
+		var errMsg string = "OK"
 		if err := recover(); err != nil {
-			this.ClearOk = false
-			tbName := this.queue[tbIdx]
-			this.clearRes[tbName] = Result{fmt.Sprintf("%v", err), 0}
+			errMsg = fmt.Sprintf("%v", err)
 		}
-		this.C <- tbIdx
+		this.C <- Result{errMsg, num, tbName, tbIdx}
 	}()
 
-	tbName := this.queue[tbIdx]
-	num := this.clear(tbName)
-	this.clearRes[tbName] = Result{"OK", num}
+	num = this.clear(tbName)
 }
 
 // 清理需要特殊处理的表
@@ -251,7 +254,7 @@ func (this *DataBase) ClearSpecial() {
 	for _, t := range conf.Special {
 		if _, ok := this.Tables[t.Name]; ok {
 			num := this.ExecSqls(t)
-			this.clearRes[t.Name] = Result{"OK", num}
+			this.clearRes[t.Name] = Result{Res: "OK", Num: num}
 		}
 	}
 }
@@ -314,39 +317,43 @@ func (this *DataBase) MergeDB(dbSlave *DataBase) {
 	}
 
 	// 首先合并player表
-	fmt.Println("尝试合并player表")
+	fmt.Println("尝试合并player表……")
 	resNum := this.checkAndMerge(dbSlave, "player")
-	this.mergeRes["player"] = Result{"OK", resNum}
+	this.mergeRes["player"] = Result{Res: "OK", Num: resNum}
 
 	// 开启goroutine
 	num := len(this.queue)
 	if num >= conf.Worker {
 		num = conf.Worker
 	}
-	for i := 0; i < num; i++ {
-		go this.TryMerge(dbSlave, this.index)
-		this.index++
+	var i int
+	for i = 0; i < num; i++ {
+		go this.TryMerge(dbSlave, i, this.queue[i])
 	}
+	this.index = i
 
 forLabel:
 	for {
 		select {
-		case idx := <-this.C:
-			this.schedule[idx] = 1
+		case res := <-this.C:
+			this.mergeRes[res.TbName] = res
+			this.schedule[res.Idx] = 1
 			if len(this.schedule) >= len(this.queue) {
 				break forLabel
 			} else {
 				if this.index < len(this.queue) {
-					go this.TryMerge(dbSlave, this.index)
+					tbName := this.queue[this.index]
+					go this.TryMerge(dbSlave, this.index, tbName)
 					this.index++
 				}
 			}
 		}
 	}
 
-	// 打印合并结构
+	// 打印合并结果
+	fmt.Printf("合并结果：共合并【%d】个表，每个表合并信息如下：\n", len(this.mergeRes))
 	for tbName, res := range this.mergeRes {
-		fmt.Printf("合并结果：表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
+		fmt.Printf("表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
 	}
 }
 
@@ -423,17 +430,15 @@ func (this *DataBase) checkAndMerge(dbSlave *DataBase, tbName string) int {
 }
 
 // 表示吃掉dbSlave
-func (this *DataBase) TryMerge(dbSlave *DataBase, tbIdx int) {
+func (this *DataBase) TryMerge(dbSlave *DataBase, tbIdx int, tbName string) {
+	var num int = 0
 	defer func() {
+		errMsg := "OK"
 		if err := recover(); err != nil {
-			tbName := this.queue[tbIdx]
-			errMsg := fmt.Sprintf("%v", err)
-			this.mergeRes[tbName] = Result{errMsg, 0}
+			errMsg = fmt.Sprintf("%v", err)
 		}
-		this.C <- tbIdx
+		this.C <- Result{errMsg, num, tbName, tbIdx}
 	}()
 
-	tbName := this.queue[tbIdx]
-	num := this.checkAndMerge(dbSlave, tbName)
-	this.mergeRes[tbName] = Result{"OK", num}
+	num = this.checkAndMerge(dbSlave, tbName)
 }
