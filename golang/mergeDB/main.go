@@ -19,6 +19,11 @@ func GetTodayZeroTime() int64 {
 	return t.Unix()
 }
 
+// 获取两个时间戳的毫秒差
+func GetDurationMs(t time.Time) int {
+	return int(time.Now().Sub(t).Nanoseconds() / 1e6)
+}
+
 func checkError(err error) {
 	if err != nil {
 		panic(err.Error())
@@ -106,8 +111,11 @@ func main() {
 		} else {
 			// 打印清理结果
 			fmt.Printf("【%s】数据库清理完毕，共清理【%d】个表\n", db.Name, len(db.clearRes))
-			for tbName, res := range db.clearRes {
-				fmt.Printf("清理结果：表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
+			if len(db.clearRes) > 0 {
+				fmt.Printf("%-20s %-10s %-10s %-s\n", "table", "num", "time(ms)", "err")
+				for tbName, res := range db.clearRes {
+					fmt.Printf("%-20s %-10d %-10d err=%-s\n", tbName, res.Num, res.UseTime, res.Res)
+				}
 			}
 		}
 	}
@@ -118,10 +126,10 @@ func main() {
 	// 合并数据
 	fmt.Println("---------------- merge db start ----------------")
 	for _, name := range conf.SlaveDb {
-		fmt.Printf("merge [%s]-[%s] begin: \n", conf.MasterDb, name)
+		fmt.Printf("merge [%s]<--[%s] begin: \n", conf.MasterDb, name)
 		startTime = time.Now()
 		Merge(conf.MasterDb, name)
-		fmt.Printf("merge [%s]-[%s] end , 耗时 = %d 毫秒 !\n\n", conf.MasterDb, name, (time.Now().Sub(startTime).Nanoseconds())/1e6)
+		fmt.Printf("merge [%s]<--[%s] end , 耗时 = %d 毫秒 !\n\n", conf.MasterDb, name, (time.Now().Sub(startTime).Nanoseconds())/1e6)
 	}
 	fmt.Println("---------------- merge db end ----------------")
 }

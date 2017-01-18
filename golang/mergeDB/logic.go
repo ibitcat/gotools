@@ -3,15 +3,17 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type Result struct {
-	Res    string //错误信息
-	Num    int    //结果条数
-	TbName string //表名
-	Idx    int    //表索引
+	Res     string //错误信息
+	Num     int    //结果条数
+	TbName  string //表名
+	Idx     int    //表索引
+	UseTime int    //耗时
 }
 
 // 数据库
@@ -212,8 +214,9 @@ func (this *DataBase) FindAndClear() {
 		this.ClearSpecial()
 
 		// 最后清player表
+		startTime := time.Now()
 		resNum := this.clear("player")
-		this.clearRes["player"] = Result{Res: "OK", Num: resNum}
+		this.clearRes["player"] = Result{Res: "OK", Num: resNum, UseTime: GetDurationMs(startTime)}
 	}
 	this.ClearOk = true
 }
@@ -231,6 +234,7 @@ func (this *DataBase) clear(tbName string) int {
 
 // 开始清除每个库的无用数据
 func (this *DataBase) ClearByIdx(tbIdx int, tbName string) {
+	startTime := time.Now()
 	var num int = 0
 	// 每个goroutine捕获自己的panic
 	defer func() {
@@ -238,7 +242,7 @@ func (this *DataBase) ClearByIdx(tbIdx int, tbName string) {
 		if err := recover(); err != nil {
 			errMsg = fmt.Sprintf("%v", err)
 		}
-		this.C <- Result{errMsg, num, tbName, tbIdx}
+		this.C <- Result{errMsg, num, tbName, tbIdx, GetDurationMs(startTime)}
 	}()
 
 	num = this.clear(tbName)
@@ -253,8 +257,9 @@ func (this *DataBase) ClearByIdx(tbIdx int, tbName string) {
 func (this *DataBase) ClearSpecial() {
 	for _, t := range conf.Special {
 		if _, ok := this.Tables[t.Name]; ok {
+			startTime := time.Now()
 			num := this.ExecSqls(t)
-			this.clearRes[t.Name] = Result{Res: "OK", Num: num}
+			this.clearRes[t.Name] = Result{Res: "OK", Num: num, UseTime: GetDurationMs(startTime)}
 		}
 	}
 }
@@ -318,8 +323,9 @@ func (this *DataBase) MergeDB(dbSlave *DataBase) {
 
 	// 首先合并player表
 	fmt.Println("尝试合并player表……")
+	startTime := time.Now()
 	resNum := this.checkAndMerge(dbSlave, "player")
-	this.mergeRes["player"] = Result{Res: "OK", Num: resNum}
+	this.mergeRes["player"] = Result{Res: "OK", Num: resNum, UseTime: GetDurationMs(startTime)}
 
 	// 开启goroutine
 	num := len(this.queue)
@@ -352,8 +358,9 @@ forLabel:
 
 	// 打印合并结果
 	fmt.Printf("合并结果：共合并【%d】个表，每个表合并信息如下：\n", len(this.mergeRes))
+	fmt.Printf("%-20s %-10s %-10s %-s\n", "table", "num", "time(ms)", "err")
 	for tbName, res := range this.mergeRes {
-		fmt.Printf("表=%-20s,err=%s,num=%d\n", tbName, res.Res, res.Num)
+		fmt.Printf("%-20s %-10d %-10d %-s\n", tbName, res.Num, res.UseTime, res.Res)
 	}
 }
 
@@ -431,13 +438,14 @@ func (this *DataBase) checkAndMerge(dbSlave *DataBase, tbName string) int {
 
 // 表示吃掉dbSlave
 func (this *DataBase) TryMerge(dbSlave *DataBase, tbIdx int, tbName string) {
+	startTime := time.Now()
 	var num int = 0
 	defer func() {
 		errMsg := "OK"
 		if err := recover(); err != nil {
 			errMsg = fmt.Sprintf("%v", err)
 		}
-		this.C <- Result{errMsg, num, tbName, tbIdx}
+		this.C <- Result{errMsg, num, tbName, tbIdx, GetDurationMs(startTime)}
 	}()
 
 	num = this.checkAndMerge(dbSlave, tbName)

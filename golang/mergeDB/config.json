@@ -1,14 +1,15 @@
 {
 	"user":"root",
 	"password":"123456",
-	"worker":2,
+	"worker":4,
 	"address":"127.0.0.1:3306",
-	"master_db":"domi_temp",
+	"master_db":"domi2",
 	"slave_db":[
-		"domi_temp2"
+		"domi1"
 	],
 	"exclude":[
-		"commonCd"
+		"commonCd",
+		"global"
 	],
 	"special":[
 		{
