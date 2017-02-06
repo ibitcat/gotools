@@ -65,6 +65,10 @@ func loadXlsx(xlsxpath string, file string) {
 	fieldRow := workSheet.Rows[1] //字段名
 	typeRow := workSheet.Rows[2]  //字段类型
 	modeRow := workSheet.Rows[3]  //生成方式
+	if len(fieldRow.Cells) == 0 {
+		level, errMsg = E_ERROR, "字段名为空"
+		return
+	}
 	for i, cell := range fieldRow.Cells {
 		fieldName, _ := cell.String()
 		//fieldName = strings.Replace(fieldName, " ", "", -1) //干掉字段名的空格
@@ -73,6 +77,10 @@ func loadXlsx(xlsxpath string, file string) {
 		if i == 0 { //字段行的第一个字段为配置的key,需要检查下
 			if len(fieldName) == 0 {
 				level, errMsg = E_ERROR, "配置没有key"
+				return
+			}
+			if modeType != "c" && modeType != "s" && modeType != "d" {
+				level, errMsg = E_ERROR, "生成方式错误"
 				return
 			}
 			if modeType != "s" && modeType != "d" {
@@ -86,13 +94,18 @@ func loadXlsx(xlsxpath string, file string) {
 			Key = fieldName
 		}
 
-		if len(fieldName) > 0 && (modeType == "s" || modeType == "d") {
-			if len(fieldType) == 0 {
-				level, errMsg = E_ERROR, "字段类型不存在"
-				return
-			}
-			if strings.Contains(fieldName, " ") {
-				level, errMsg = E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)
+		if modeType == "s" || modeType == "d" {
+			if len(fieldName) > 0 {
+				if len(fieldType) == 0 {
+					level, errMsg = E_ERROR, "字段类型不存在"
+					return
+				}
+				if strings.Contains(fieldName, " ") {
+					level, errMsg = E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)
+					return
+				}
+			} else {
+				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
 				return
 			}
 			Field[i] = FieldInfo{fieldName, fieldType}
