@@ -79,10 +79,6 @@ func loadXlsx(xlsxpath string, file string) {
 				level, errMsg = E_ERROR, "配置没有key"
 				return
 			}
-			if modeType != "c" && modeType != "s" && modeType != "d" {
-				level, errMsg = E_ERROR, "生成方式错误"
-				return
-			}
 			if modeType != "s" && modeType != "d" {
 				level, errMsg = E_WARN, "不需要生成"
 				return
@@ -94,6 +90,12 @@ func loadXlsx(xlsxpath string, file string) {
 			Key = fieldName
 		}
 
+		if len(fieldName) > 0 {
+			if modeType != "c" && modeType != "s" && modeType != "d" {
+				level, errMsg = E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)
+				return
+			}
+		}
 		if modeType == "s" || modeType == "d" {
 			if len(fieldName) > 0 {
 				if len(fieldType) == 0 {
@@ -319,6 +321,7 @@ func main() {
 
 	fmt.Printf("%-60s %-s\n", "path", "err")
 	fmt.Println(strings.Repeat("-", 65))
+	allOk := true
 	for i := 0; i < len(xlsxMap); i++ {
 		res := <-resChan
 		if res.Level == 1 { //警告
@@ -326,6 +329,9 @@ func main() {
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
 			color.Unset()
 		} else if res.Level == 2 { //错误
+			if allOk {
+				allOk = false
+			}
 			color.Set(color.FgRed)
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
 			color.Unset()
@@ -334,5 +340,11 @@ func main() {
 		}
 	}
 
-	fmt.Printf("生成完毕，耗时=%d 毫秒 ！\n", GetDurationMs(startTime))
+	if allOk {
+		fmt.Printf("生成完毕，耗时=%d 毫秒 ！\n", GetDurationMs(startTime))
+	} else {
+		color.Set(color.FgRed)
+		fmt.Printf("生成有错误，耗时=%d 毫秒 ！\n", GetDurationMs(startTime))
+		color.Unset()
+	}
 }
