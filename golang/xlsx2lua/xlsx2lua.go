@@ -37,6 +37,27 @@ func checkErr(e error) {
 	}
 }
 
+// 获取文件名
+func getFileName(file string) string {
+	return strings.TrimSuffix(file, ".xlsx")
+}
+
+// 获取lua输出路径（文件夹，例如：/item/）
+func genLuaDir(xlsxpath string, file string) string {
+	p := strings.TrimSuffix(xlsxpath, file)
+	p = strings.TrimPrefix(p, xlsxRoot)
+	luaDir := luaRoot + p
+	return luaDir
+}
+
+// 删除服务器无用的lua文件
+func removeLua(xlsxpath string, file string) {
+	fileName := getFileName(file)
+	luaDir := genLuaDir(xlsxpath, file)
+	luaFile := fmt.Sprintf("%s%s.lua", luaDir, fileName)
+	os.Remove(luaFile)
+}
+
 func loadXlsx(xlsxpath string, file string) {
 	errMsg := "OK"
 	level := E_NONE
@@ -69,6 +90,8 @@ func loadXlsx(xlsxpath string, file string) {
 		level, errMsg = E_ERROR, "字段名为空"
 		return
 	}
+
+	// 解析配置头
 	for i, cell := range fieldRow.Cells {
 		fieldName, _ := cell.String()
 		//fieldName = strings.Replace(fieldName, " ", "", -1) //干掉字段名的空格
@@ -81,6 +104,7 @@ func loadXlsx(xlsxpath string, file string) {
 			}
 			if modeType != "s" && modeType != "d" {
 				level, errMsg = E_WARN, "不需要生成"
+				removeLua(xlsxpath, file)
 				return
 			}
 			if fieldType != "int" {
@@ -190,15 +214,13 @@ forLable:
 }
 
 // 目录不存在则新建目录
-func outPutToLua(path string, file string, rowsSlice []string) {
-	fileName := strings.TrimSuffix(file, ".xlsx")
-	p := strings.TrimSuffix(path, file)
-	p = strings.TrimPrefix(p, xlsxRoot)
-	luaPath := luaRoot + p
+func outPutToLua(xlsxpath string, file string, rowsSlice []string) {
+	fileName := getFileName(file)
+	luaDir := genLuaDir(xlsxpath, file)
 
-	_, err := os.Stat(luaPath)
+	_, err := os.Stat(luaDir)
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(luaPath, os.ModePerm)
+		err = os.MkdirAll(luaDir, os.ModePerm)
 		if err != nil {
 			panic("mkdir failed!")
 			return
@@ -218,8 +240,7 @@ func outPutToLua(path string, file string, rowsSlice []string) {
 		}
 	*/
 
-	luaFile := fmt.Sprintf("%s%s.lua", luaPath, fileName)
-	//fmt.Println("file===", luaFile)
+	luaFile := fmt.Sprintf("%s%s.lua", luaDir, fileName)
 	outFile, operr := os.OpenFile(luaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
 	checkErr(operr)
 	defer outFile.Close()
