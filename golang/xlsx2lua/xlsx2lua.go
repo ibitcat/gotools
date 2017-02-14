@@ -1,3 +1,9 @@
+/*
+author：domicat
+date： 2017-2-14
+brief：xlsx转lua工具，支持id重复检测，支持json格式错误检测。
+*/
+
 package main
 
 import (
