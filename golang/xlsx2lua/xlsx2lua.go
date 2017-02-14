@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	//"crypto/md5"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -91,6 +92,7 @@ func loadXlsx(xlsxpath string, file string) {
 		return
 	}
 
+	var checkOnly bool = false // 纯客户端的配置，只需要检查id重复和json格式
 	// 解析配置头
 	for i, cell := range fieldRow.Cells {
 		fieldName, _ := cell.String()
@@ -104,10 +106,11 @@ func loadXlsx(xlsxpath string, file string) {
 			}
 			if modeType != "s" && modeType != "d" {
 				level, errMsg = E_WARN, "不需要生成"
+				checkOnly = true
 				removeLua(xlsxpath, file)
-				return
+				//return
 			}
-			if fieldType != "int" {
+			if fieldType != "int" && !checkOnly {
 				level, errMsg = E_ERROR, "id字段类型必须为int"
 				return
 			}
@@ -120,7 +123,7 @@ func loadXlsx(xlsxpath string, file string) {
 				return
 			}
 		}
-		if modeType == "s" || modeType == "d" {
+		if modeType == "s" || modeType == "d" || modeType == "c" {
 			if len(fieldName) > 0 {
 				if len(fieldType) == 0 {
 					level, errMsg = E_ERROR, "字段类型不存在"
@@ -134,20 +137,21 @@ func loadXlsx(xlsxpath string, file string) {
 				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
 				return
 			}
-			Field[i] = FieldInfo{fieldName, fieldType}
+			Field[i] = FieldInfo{fieldName, fieldType, modeType}
 		}
 	}
 
 	// 配置
 	sliceLen := len(workSheet.Rows) * (len(Field) + 2)
 	rowsSlice := make([]string, 0, sliceLen)
+	if !checkOnly {
+		// 文件头
+		rowsSlice = append(rowsSlice, "--Don't Edit!!!") //第一行先占用
 
-	// 文件头
-	rowsSlice = append(rowsSlice, "--Don't Edit!!!") //第一行先占用
-
-	// 配置table
-	rowsSlice = append(rowsSlice, "return {")
-	rowsSlice = append(rowsSlice, "{")
+		// 配置table
+		rowsSlice = append(rowsSlice, "return {")
+		rowsSlice = append(rowsSlice, "{")
+	}
 
 	idMap := make(map[string]bool) //检查id是否重复
 forLable:
@@ -166,29 +170,47 @@ forLable:
 						} else {
 							idMap[text] = true
 						}
-						str := fmt.Sprintf("    [%s] = {", text)
-						rowsSlice = append(rowsSlice, str)
+						if !checkOnly {
+							str := fmt.Sprintf("    [%s] = {", text)
+							rowsSlice = append(rowsSlice, str)
+						}
 					}
 				}
 
 				// fields
 				if f, ok := Field[idx]; ok && len(text) > 0 {
-					var str string
-					if f.Type == "int" || f.Type == "number" {
-						str = fmt.Sprintf("        ['%s'] = %s,", f.Name, text)
-					} else {
-						if f.Type == "table" {
-							// 压缩成一行
-							text = strings.Replace(text, " ", "", -1)
-							text = strings.Replace(text, "\n", "", -1)
+					if f.Type == "table" {
+						var temp interface{}
+						err = json.Unmarshal([]byte(text), &temp)
+						if err != nil {
+							level, errMsg = E_ERROR, fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
+							return
 						}
-						str = fmt.Sprintf("        ['%s'] = '%s',", f.Name, text)
 					}
-					rowsSlice = append(rowsSlice, str)
+
+					if !checkOnly && (f.Mode == "s" || f.Mode == "d") {
+						var str string
+						if f.Type == "int" || f.Type == "number" {
+							str = fmt.Sprintf("        ['%s'] = %s,", f.Name, text)
+						} else {
+							if f.Type == "table" {
+								// 压缩成一行
+								text = strings.Replace(text, " ", "", -1)
+								text = strings.Replace(text, "\n", "", -1)
+							}
+							str = fmt.Sprintf("        ['%s'] = '%s',", f.Name, text)
+						}
+						rowsSlice = append(rowsSlice, str)
+					}
 				}
 			}
-			rowsSlice = append(rowsSlice, "    },")
+			if !checkOnly {
+				rowsSlice = append(rowsSlice, "    },")
+			}
 		}
+	}
+	if checkOnly {
+		return
 	}
 	rowsSlice = append(rowsSlice, "},")
 
@@ -201,7 +223,9 @@ forLable:
 	rowsSlice = append(rowsSlice, "\n{")
 	for _, v := range idxs {
 		f := Field[v]
-		rowsSlice = append(rowsSlice, fmt.Sprintf("    ['%s'] = '%s',", f.Name, f.Type))
+		if f.Mode == "s" || f.Mode == "d" {
+			rowsSlice = append(rowsSlice, fmt.Sprintf("    ['%s'] = '%s',", f.Name, f.Type))
+		}
 	}
 	rowsSlice = append(rowsSlice, "},\n")
 
@@ -310,6 +334,7 @@ type Result struct {
 type FieldInfo struct {
 	Name string
 	Type string
+	Mode string
 }
 
 var luaRoot string
