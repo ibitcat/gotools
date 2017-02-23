@@ -176,17 +176,15 @@ func loadXlsx(xlsxpath string, file string) {
 				level, errMsg = E_ERROR, "字段类型不存在"
 				return
 			}
+			Field[i] = FieldInfo{fieldName, fieldType, modeType}
 		} else {
 			if len(modeType) > 0 || len(fieldType) > 0 {
 				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
 			}
-			return
 		}
 
-		Field[i] = FieldInfo{fieldName, fieldType, modeType}
 		if (modeType == "s" || modeType == "d") &&
-			fieldType == "string" &&
-			len(langRoot) > 0 {
+			fieldType == "string" && len(langRoot) > 0 {
 			needTrans = true
 		}
 	}
@@ -284,6 +282,7 @@ forLable:
 	if checkOnly {
 		return
 	}
+
 	rowsSlice = append(rowsSlice, "},")
 
 	// 字段table
