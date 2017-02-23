@@ -14,12 +14,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Luxurioust/excelize"
 	"github.com/fatih/color"
-	"github.com/tealeg/xlsx"
 )
 
 const (
@@ -65,6 +66,44 @@ func removeLua(xlsxpath string, file string) {
 	os.Remove(luaFile)
 }
 
+func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
+	p := strings.TrimPrefix(xlsxpath, xlsxRoot)
+	sep := "/"
+	if runtime.GOOS == "windows" {
+		sep = "\\"
+	}
+	p = strings.Replace(p, sep, "$", -1)
+	langFile := langRoot + sep + p
+
+	xlFile, err := excelize.OpenFile(langFile)
+	if err != nil {
+		return nil, nil, nil
+	}
+
+	workRows := xlFile.GetRows("Sheet1")
+	FieldRef := make(map[string]int)
+	IdRef := make(map[string]int)
+	for i, row := range workRows {
+		if i == 0 { //第一行
+			for j, text := range row {
+				if strings.Contains(text, "_翻译") {
+					fieldName := strings.TrimRight(text, "_翻译")
+					if _, ok := FieldRef[fieldName]; ok {
+						FieldRef[fieldName] = j
+					}
+				} else {
+					FieldRef[text] = j
+				}
+			}
+		} else {
+			id := row[0]
+			IdRef[id] = i
+		}
+	}
+
+	return workRows, FieldRef, IdRef
+}
+
 func loadXlsx(xlsxpath string, file string) {
 	errMsg := "OK"
 	level := E_NONE
@@ -75,36 +114,36 @@ func loadXlsx(xlsxpath string, file string) {
 		resChan <- Result{xlsxpath, errMsg, level}
 	}()
 
-	xlFile, err := xlsx.OpenFile(xlsxpath)
+	xlFile, err := excelize.OpenFile(xlsxpath)
 	if err != nil {
-		fmt.Println(err)
+		level, errMsg = E_ERROR, err.Error()
+		return
 	}
 
 	Key := ""
 	Field := make(map[int]FieldInfo, 50) //最多50个字段
 
 	// 第一个sheet为配置
-	workSheet := xlFile.Sheets[0]
-	if len(workSheet.Rows) < 4 {
+	workRows := xlFile.GetRows("Sheet1")
+	if len(workRows) < 4 {
 		level, errMsg = E_ERROR, "至少要4行"
 		return
 	}
 
-	fieldRow := workSheet.Rows[1] //字段名
-	typeRow := workSheet.Rows[2]  //字段类型
-	modeRow := workSheet.Rows[3]  //生成方式
-	if len(fieldRow.Cells) == 0 {
+	fieldRow := workRows[1] //字段名
+	typeRow := workRows[2]  //字段类型
+	modeRow := workRows[3]  //生成方式
+	if len(fieldRow) == 0 {
 		level, errMsg = E_ERROR, "字段名为空"
 		return
 	}
 
-	var checkOnly bool = false // 纯客户端的配置，只需要检查id重复和json格式
 	// 解析配置头
-	for i, cell := range fieldRow.Cells {
-		fieldName, _ := cell.String()
-		//fieldName = strings.Replace(fieldName, " ", "", -1) //干掉字段名的空格
-		fieldType, _ := typeRow.Cells[i].String()
-		modeType, _ := modeRow.Cells[i].String()
+	var needTrans bool = false // 是否需要翻译
+	var checkOnly bool = false // 纯客户端的配置，只需要检查id重复和json格式
+	for i, fieldName := range fieldRow {
+		fieldType := typeRow[i]
+		modeType := modeRow[i]
 		if i == 0 { //字段行的第一个字段为配置的key,需要检查下
 			if len(fieldName) == 0 {
 				level, errMsg = E_ERROR, "配置没有key"
@@ -114,41 +153,53 @@ func loadXlsx(xlsxpath string, file string) {
 				level, errMsg = E_WARN, "不需要生成"
 				checkOnly = true
 				removeLua(xlsxpath, file)
-				//return
+			} else {
+				if fieldType != "int" {
+					level, errMsg = E_ERROR, "id字段类型必须为int"
+					return
+				}
 			}
-			if fieldType != "int" && !checkOnly {
-				level, errMsg = E_ERROR, "id字段类型必须为int"
-				return
-			}
+
 			Key = fieldName
 		}
 
 		if len(fieldName) > 0 {
+			if strings.Contains(fieldName, " ") {
+				level, errMsg = E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)
+				return
+			}
 			if modeType != "c" && modeType != "s" && modeType != "d" {
 				level, errMsg = E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)
 				return
 			}
-		}
-		if modeType == "s" || modeType == "d" || modeType == "c" {
-			if len(fieldName) > 0 {
-				if len(fieldType) == 0 {
-					level, errMsg = E_ERROR, "字段类型不存在"
-					return
-				}
-				if strings.Contains(fieldName, " ") {
-					level, errMsg = E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)
-					return
-				}
-			} else {
-				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
+			if len(fieldType) == 0 {
+				level, errMsg = E_ERROR, "字段类型不存在"
 				return
 			}
-			Field[i] = FieldInfo{fieldName, fieldType, modeType}
+		} else {
+			if len(modeType) > 0 || len(fieldType) > 0 {
+				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
+			}
+			return
+		}
+
+		Field[i] = FieldInfo{fieldName, fieldType, modeType}
+		if (modeType == "s" || modeType == "d") &&
+			fieldType == "string" &&
+			len(langRoot) > 0 {
+			needTrans = true
 		}
 	}
 
+	var fieldRef, idRef map[string]int
+	var tranRows [][]string
+	if needTrans {
+		// 读取翻译文件
+		tranRows, fieldRef, idRef = loadLang(xlsxpath)
+	}
+
 	// 配置
-	sliceLen := len(workSheet.Rows) * (len(Field) + 2)
+	sliceLen := len(workRows) * (len(Field) + 2)
 	rowsSlice := make([]string, 0, sliceLen)
 	if !checkOnly {
 		// 文件头
@@ -161,12 +212,13 @@ func loadXlsx(xlsxpath string, file string) {
 
 	idMap := make(map[string]bool) //检查id是否重复
 forLable:
-	for i := 4; i < len(workSheet.Rows); i++ {
-		row := workSheet.Rows[i]
-		if len(row.Cells) > 0 {
-			for idx, cell := range row.Cells {
-				text, _ := cell.String()
+	for i := 4; i < len(workRows); i++ {
+		row := workRows[i]
+		if len(row) > 0 {
+			var id string
+			for idx, text := range row {
 				if idx == 0 { //key
+					id = text
 					if len(text) == 0 { //如果key字段的值为空，则停止解析配置
 						break forLable
 					} else {
@@ -203,6 +255,20 @@ forLable:
 								// 压缩成一行
 								text = strings.Replace(text, " ", "", -1)
 								text = strings.Replace(text, "\n", "", -1)
+							} else if f.Type == "string" { // ' 替换成 \'
+								if needTrans {
+									rId, rOk := idRef[id]
+									cId, cOk := fieldRef[f.Name]
+									if rOk && cOk &&
+										len(tranRows) > rId &&
+										len(tranRows[rId]) > cId {
+										trCell := tranRows[rId][cId]
+										if len(trCell) > 0 {
+											text = trCell
+										}
+									}
+								}
+								text = strings.Replace(text, "'", `\'`, -1)
 							}
 							str = fmt.Sprintf("        ['%s'] = '%s',", f.Name, text)
 						}
@@ -345,6 +411,7 @@ type FieldInfo struct {
 
 var luaRoot string
 var xlsxRoot string
+var langRoot string
 var resChan chan Result
 var xlsxMap map[string]string
 var resMap map[string]Result
@@ -353,6 +420,7 @@ var luaMap map[string]string
 func main() {
 	flag.StringVar(&xlsxRoot, "i", "", "输入路径")
 	flag.StringVar(&luaRoot, "o", "", "输出路径")
+	flag.StringVar(&langRoot, "l", "", "翻译文件路径")
 	flag.Parse()
 	if len(luaRoot) == 0 || len(xlsxRoot) == 0 {
 		color.Red("输入路径或输出路径为空")
