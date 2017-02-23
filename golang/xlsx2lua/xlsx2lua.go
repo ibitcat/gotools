@@ -181,6 +181,7 @@ func loadXlsx(xlsxpath string, file string) {
 			if len(modeType) > 0 || len(fieldType) > 0 {
 				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
 			}
+			break
 		}
 
 		if (modeType == "s" || modeType == "d") &&
