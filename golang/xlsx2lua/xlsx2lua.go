@@ -400,7 +400,7 @@ func walkLua(path string) {
 type Result struct {
 	Name   string
 	ErrMsg string
-	Level  int //0=普通 1=警告 2=错误
+	Level  int //0=成功 1=警告 2=错误
 }
 
 type FieldInfo struct {
@@ -414,7 +414,6 @@ var xlsxRoot string
 var langRoot string
 var resChan chan Result
 var xlsxMap map[string]string
-var resMap map[string]Result
 var luaMap map[string]string
 
 func main() {
@@ -429,21 +428,32 @@ func main() {
 
 	luaMap = make(map[string]string)
 	xlsxMap = make(map[string]string)
-	resMap = make(map[string]Result)
 
 	startTime := time.Now()
 	//walkLua(luaRoot)
 	walkXlsx(xlsxRoot)
 	resChan = make(chan Result, len(xlsxMap))
+	fmt.Println("正在生成，请稍后……")
 	for path, f := range xlsxMap {
 		go loadXlsx(path, f)
 	}
 
-	fmt.Printf("%-60s %-s\n", "path", "err")
-	fmt.Println(strings.Repeat("-", 65))
-	allOk := true
+	resSlice := make([]Result, 0, len(xlsxMap))
 	for i := 0; i < len(xlsxMap); i++ {
 		res := <-resChan
+		resSlice = append(resSlice, res)
+	}
+
+	msec := GetDurationMs(startTime)
+	printResult(resSlice, msec)
+}
+
+func printResult(resSlice []Result, msec int) {
+	fmt.Println("生成结束，结果如下：")
+
+	sort.Slice(resSlice, func(i, j int) bool { return resSlice[i].Name < resSlice[j].Name })
+	allOk := true
+	for _, res := range resSlice {
 		if res.Level == 1 { //警告
 			color.Set(color.FgYellow)
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
@@ -461,10 +471,10 @@ func main() {
 	}
 
 	if allOk {
-		fmt.Printf("生成完毕，耗时=%d 毫秒 ！\n", GetDurationMs(startTime))
+		fmt.Printf("生成完毕，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
 	} else {
 		color.Set(color.FgRed)
-		fmt.Printf("生成有错误，耗时=%d 毫秒 ！\n", GetDurationMs(startTime))
+		fmt.Printf("生成有错误，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
 		color.Unset()
 	}
 }
