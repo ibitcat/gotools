@@ -7,15 +7,15 @@ brief：xlsx转lua工具，支持id重复检测，支持json格式错误检测�
 package main
 
 import (
-	"bufio"
-	//"crypto/md5"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,10 +80,10 @@ func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
 		return nil, nil, nil
 	}
 
-	workRows := xlFile.GetRows("Sheet1")
+	sheet := xlFile.GetRows("Sheet1")
 	FieldRef := make(map[string]int)
 	IdRef := make(map[string]int)
-	for i, row := range workRows {
+	for i, row := range sheet {
 		if i == 0 { //第一行
 			for j, text := range row {
 				if strings.Contains(text, "_翻译") {
@@ -96,155 +96,185 @@ func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
 				}
 			}
 		} else {
-			id := row[0]
-			IdRef[id] = i
+			IdRef[row[0]] = i
 		}
 	}
 
-	return workRows, FieldRef, IdRef
+	return sheet, FieldRef, IdRef
 }
 
-func loadXlsx(xlsxpath string, file string) {
-	errMsg := "OK"
-	level := E_NONE
-	defer func() {
-		if err := recover(); err != nil {
-			errMsg = fmt.Sprintf("%v", err)
-		}
-		resChan <- Result{xlsxpath, errMsg, level}
-	}()
-
-	xlFile, err := excelize.OpenFile(xlsxpath)
-	if err != nil {
-		level, errMsg = E_ERROR, err.Error()
-		return
-	}
-
-	Key := ""
-	Field := make(map[int]FieldInfo, 50) //最多50个字段
-
-	// 第一个sheet为配置
-	workRows := xlFile.GetRows("Sheet1")
-	if len(workRows) < 4 {
-		level, errMsg = E_ERROR, "至少要4行"
-		return
-	}
-
-	fieldRow := workRows[1] //字段名
-	typeRow := workRows[2]  //字段类型
-	modeRow := workRows[3]  //生成方式
+// 解析配置头
+func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
+	fieldRow := workSheet[1] //字段名
+	typeRow := workSheet[2]  //字段类型
+	modeRow := workSheet[3]  //生成方式
 	if len(fieldRow) == 0 {
-		level, errMsg = E_ERROR, "字段名为空"
-		return
+		return ErrorInfo{E_ERROR, "字段名为空"}, nil
 	}
 
-	// 解析配置头
-	var needTrans bool = false // 是否需要翻译
-	var checkOnly bool = false // 纯客户端的配置，只需要检查id重复和json格式
+	Field := make(map[int]FieldInfo, 50) //最多50个字段
 	for i, fieldName := range fieldRow {
 		fieldType := typeRow[i]
 		modeType := modeRow[i]
+
+		// 检测key字段
 		if i == 0 { //字段行的第一个字段为配置的key,需要检查下
 			if len(fieldName) == 0 {
-				level, errMsg = E_ERROR, "配置没有key"
-				return
+				return ErrorInfo{E_ERROR, "配置没有key"}, nil
 			}
-			if modeType != "s" && modeType != "d" {
-				level, errMsg = E_WARN, "不需要生成"
-				checkOnly = true
-				removeLua(xlsxpath, file)
-			} else {
-				if fieldType != "int" {
-					level, errMsg = E_ERROR, "id字段类型必须为int"
-					return
-				}
+			if fieldType != "int" && fieldType != "string" {
+				return ErrorInfo{E_ERROR, "id字段类型错误"}, nil
 			}
-
-			Key = fieldName
 		}
 
+		// 字段通用检查
 		if len(fieldName) > 0 {
 			if strings.Contains(fieldName, " ") {
-				level, errMsg = E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)
-				return
+				return ErrorInfo{E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)}, nil
 			}
 			if modeType != "c" && modeType != "s" && modeType != "d" {
-				level, errMsg = E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)
-				return
+				return ErrorInfo{E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)}, nil
 			}
 			if len(fieldType) == 0 {
-				level, errMsg = E_ERROR, "字段类型不存在"
-				return
+				return ErrorInfo{E_ERROR, "字段类型不存在"}, nil
 			}
 			Field[i] = FieldInfo{fieldName, fieldType, modeType}
 		} else {
 			if len(modeType) > 0 || len(fieldType) > 0 {
-				level, errMsg = E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)
+				return ErrorInfo{E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)}, nil
 			}
 			break
 		}
+	}
 
-		if (modeType == "s" || modeType == "d") &&
-			fieldType == "string" && len(langRoot) > 0 {
-			needTrans = true
+	return ErrorInfo{E_NONE, "OK"}, Field
+}
+
+// 检查能否翻译
+func checkTranslation(src, dst []string) bool {
+	if len(src) != len(dst) {
+		return false
+	}
+
+	for i, v := range src {
+		if v != dst[i] {
+			return false
 		}
 	}
+	return true
+}
 
-	var fieldRef, idRef map[string]int
-	var tranRows [][]string
-	if needTrans {
-		// 读取翻译文件
-		tranRows, fieldRef, idRef = loadLang(xlsxpath)
+// 解析成lua格式
+func parseToLua(xlsxpath string, file string, workSheet [][]string, Field map[int]FieldInfo, errInfo *ErrorInfo) {
+	var rowsSlice []string
+
+	// 检查key字段
+	keyField := Field[0]
+	key := Field[0].Name
+	checkOnly := false
+	if keyField.Mode != "s" && keyField.Mode != "d" {
+		removeLua(xlsxpath, file)
+		errInfo.Level = E_WARN
+		errInfo.ErrMsg = "不需要生成"
+
+		checkOnly = true //客户端配置，仅需要检查json格式
 	}
-
-	// 配置
-	sliceLen := len(workRows) * (len(Field) + 2)
-	rowsSlice := make([]string, 0, sliceLen)
 	if !checkOnly {
-		// 文件头
+		sliceLen := len(workSheet) * (len(Field) + 2)
+		rowsSlice = make([]string, 0, sliceLen)
 		rowsSlice = append(rowsSlice, "--Don't Edit!!!") //第一行先占用
 
-		// 配置table
+		// 配置
 		rowsSlice = append(rowsSlice, "return {")
 		rowsSlice = append(rowsSlice, "{")
 	}
 
+	// 配置是否需要翻译
+	needTrans := false
+	var fieldRef, idRef map[string]int
+	var langSheet [][]string
+	var re *regexp.Regexp
+	if len(langRoot) > 0 {
+		for _, f := range Field {
+			if (f.Mode == "s" || f.Mode == "d") && f.Type == "string" {
+				needTrans = true
+				langSheet, fieldRef, idRef = loadLang(xlsxpath) // 读取翻译文件
+				re = regexp.MustCompile(`%[a-z]`)               // 匹配占位符
+				break
+			}
+		}
+	}
+
+	// 从配置的第4行开始解析
 	idMap := make(map[string]bool) //检查id是否重复
 forLable:
-	for i := 4; i < len(workRows); i++ {
-		row := workRows[i]
+	for i := 4; i < len(workSheet); i++ {
+		row := workSheet[i]
 		if len(row) > 0 {
 			var id string
 			for idx, text := range row {
-				if idx == 0 { //key
-					id = text
-					if len(text) == 0 { //如果key字段的值为空，则停止解析配置
-						break forLable
-					} else {
-						if _, ok := idMap[text]; ok {
-							level, errMsg = E_ERROR, fmt.Sprintf("id重复,第%d行,id=%s", i+1, text)
-							return
-						} else {
-							idMap[text] = true
-						}
-						if !checkOnly {
-							str := fmt.Sprintf("    [%s] = {", text)
-							rowsSlice = append(rowsSlice, str)
-						}
-					}
-				}
-
 				// fields
-				if f, ok := Field[idx]; ok && len(text) > 0 {
-					if f.Type == "table" {
-						var temp interface{}
-						err = json.Unmarshal([]byte(text), &temp)
-						if err != nil {
-							level, errMsg = E_ERROR, fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
-							return
+				if f, ok := Field[idx]; ok {
+					// key 字段
+					if idx == 0 {
+						id = text
+						if len(text) == 0 { //如果key字段的值为空，则停止解析配置
+							break forLable
+						} else {
+							if _, ok := idMap[text]; ok {
+								errInfo.Level = E_ERROR
+								errInfo.ErrMsg = fmt.Sprintf("id重复,第%d行,id=%s", i+1, text)
+								return
+							} else {
+								idMap[text] = true
+							}
+
+							if !checkOnly {
+								var str string
+								if f.Type == "int" {
+									str = fmt.Sprintf("    [%s] = {", text)
+								} else {
+									str = fmt.Sprintf("    ['%s'] = {", text)
+								}
+
+								rowsSlice = append(rowsSlice, str)
+							}
 						}
 					}
 
+					if len(text) <= 0 {
+						continue
+					}
+
+					// json格式是否正确
+					if f.Type == "table" {
+						if needTrans {
+							rId, rOk := idRef[id]
+							cId, cOk := fieldRef[f.Name]
+							if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
+								trCell := langSheet[rId][cId]
+								if len(trCell) > 0 {
+									var temp interface{}
+									err := json.Unmarshal([]byte(trCell), &temp)
+									if err != nil {
+										errInfo.Level = E_ERROR
+										errInfo.ErrMsg = fmt.Sprintf("翻译json格式错误,第%d行,字段%s", rId+1, f.Name)
+										return
+									}
+								}
+							}
+						} else {
+							var temp interface{}
+							err := json.Unmarshal([]byte(text), &temp)
+							if err != nil {
+								errInfo.Level = E_ERROR
+								errInfo.ErrMsg = fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
+								return
+							}
+						}
+					}
+
+					// 只生成服务器需要的字段
 					if !checkOnly && (f.Mode == "s" || f.Mode == "d") {
 						var str string
 						if f.Type == "int" || f.Type == "number" {
@@ -255,15 +285,27 @@ forLable:
 								text = strings.Replace(text, " ", "", -1)
 								text = strings.Replace(text, "\n", "", -1)
 							} else if f.Type == "string" { // ' 替换成 \'
+								// 翻译
 								if needTrans {
 									rId, rOk := idRef[id]
 									cId, cOk := fieldRef[f.Name]
-									if rOk && cOk &&
-										len(tranRows) > rId &&
-										len(tranRows[rId]) > cId {
-										trCell := tranRows[rId][cId]
+									if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
+										trCell := langSheet[rId][cId]
 										if len(trCell) > 0 {
-											text = trCell
+											checkOk := true
+											if file == "string.xlsx" ||
+												file == "error.xlsx" {
+												reSlice1 := re.FindAllString(text, -1)
+												reSlice2 := re.FindAllString(trCell, -1)
+												if !checkTranslation(reSlice1, reSlice2) {
+													errInfo.Level = E_ERROR
+													errInfo.ErrMsg = fmt.Sprintf("翻译错误,id=%s,字段%s", id, f.Name)
+													checkOk = false
+												}
+											}
+											if checkOk {
+												text = trCell
+											}
 										}
 									}
 								}
@@ -275,38 +317,38 @@ forLable:
 					}
 				}
 			}
+
 			if !checkOnly {
 				rowsSlice = append(rowsSlice, "    },")
 			}
 		}
 	}
-	if checkOnly {
-		return
-	}
 
-	rowsSlice = append(rowsSlice, "},")
-
-	// 字段table
-	idxs := make([]int, 0, len(Field))
-	for k, _ := range Field {
-		idxs = append(idxs, k)
-	}
-	sort.Ints(idxs)
-	rowsSlice = append(rowsSlice, "\n{")
-	for _, v := range idxs {
-		f := Field[v]
-		if f.Mode == "s" || f.Mode == "d" {
-			rowsSlice = append(rowsSlice, fmt.Sprintf("    ['%s'] = '%s',", f.Name, f.Type))
+	// 配置解析完毕，添加字段表
+	if !checkOnly {
+		rowsSlice = append(rowsSlice, "},")
+		// 字段table
+		idxs := make([]int, 0, len(Field))
+		for k, _ := range Field {
+			idxs = append(idxs, k)
 		}
+		sort.Ints(idxs)
+		rowsSlice = append(rowsSlice, "\n{")
+		for _, v := range idxs {
+			f := Field[v]
+			if f.Mode == "s" || f.Mode == "d" {
+				rowsSlice = append(rowsSlice, fmt.Sprintf("    ['%s'] = '%s',", f.Name, f.Type))
+			}
+		}
+		rowsSlice = append(rowsSlice, "},\n")
+
+		// key
+		rowsSlice = append(rowsSlice, fmt.Sprintf("'%s'", key))
+		rowsSlice = append(rowsSlice, "}")
+
+		// 生成lua文件
+		outPutToLua(xlsxpath, file, rowsSlice)
 	}
-	rowsSlice = append(rowsSlice, "},\n")
-
-	// key
-	rowsSlice = append(rowsSlice, fmt.Sprintf("'%s'", Key))
-	rowsSlice = append(rowsSlice, "}")
-
-	// 生成lua文件
-	outPutToLua(xlsxpath, file, rowsSlice)
 }
 
 // 目录不存在则新建目录
@@ -318,7 +360,7 @@ func outPutToLua(xlsxpath string, file string, rowsSlice []string) {
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(luaDir, os.ModePerm)
 		if err != nil {
-			panic("mkdir failed!")
+			//panic("mkdir failed!")
 			return
 		}
 	}
@@ -345,6 +387,43 @@ func outPutToLua(xlsxpath string, file string, rowsSlice []string) {
 	outFile.Sync()
 }
 
+func loadXlsx(xlsxpath string, file string) {
+	errInfo := ErrorInfo{E_NONE, "OK"}
+	durationms := 0
+	defer func() {
+		if err := recover(); err != nil {
+			errInfo.ErrMsg = fmt.Sprintf("%v", err)
+		}
+		resChan <- Result{xlsxpath, errInfo, durationms}
+	}()
+
+	startTime := time.Now()
+	xlFile, err := excelize.OpenFile(xlsxpath)
+	if err != nil {
+		errInfo.Level = E_ERROR
+		errInfo.ErrMsg = err.Error()
+		return
+	}
+
+	// 第一个sheet为配置
+	workSheet := xlFile.GetRows("Sheet1")
+	if len(workSheet) < 4 {
+		errInfo.Level = E_ERROR
+		errInfo.ErrMsg = "配置头至少要4行"
+		return
+	}
+
+	eret, fields := loadXlsxHead(workSheet)
+	if eret.Level == E_ERROR {
+		errInfo.Level = E_ERROR
+		errInfo.ErrMsg = eret.ErrMsg
+		return
+	}
+
+	parseToLua(xlsxpath, file, workSheet, fields, &errInfo)
+	durationms = GetDurationMs(startTime)
+}
+
 func walkXlsx(path string) {
 	err := filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
 		ok, mErr := filepath.Match("[^~$]*.xlsx", f.Name())
@@ -356,7 +435,7 @@ func walkXlsx(path string) {
 				return nil
 			}
 
-			xlsxMap[path] = f.Name()
+			xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name()})
 			return nil
 		}
 		return mErr
@@ -364,43 +443,20 @@ func walkXlsx(path string) {
 	checkErr(err)
 }
 
-func walkLua(path string) {
-	err := filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
-		ok, mErr := filepath.Match("*.lua", f.Name())
-		if ok {
-			if f == nil {
-				return err
-			}
-			if f.IsDir() {
-				return nil
-			}
-
-			// 按行读取文件
-			file, ferr := os.Open(path)
-			checkErr(ferr)
-			defer file.Close()
-
-			scanner := bufio.NewScanner(file)
-			if scanner.Scan() {
-				firstLine := scanner.Text()
-				if strings.Contains(firstLine, "--md5:") {
-					p := strings.TrimPrefix(path, luaRoot)
-					p = strings.TrimSuffix(p, ".lua")
-					luaMap[p] = firstLine[6:]
-				}
-			}
-
-			return nil
-		}
-		return mErr
-	})
-	checkErr(err)
+type ErrorInfo struct {
+	Level  int //0=成功 1=警告 2=错误
+	ErrMsg string
 }
 
 type Result struct {
-	Name   string
-	ErrMsg string
-	Level  int //0=成功 1=警告 2=错误
+	Name string
+	ErrorInfo
+	Msec int
+}
+
+type XlsxPath struct {
+	PathName string
+	FileName string
 }
 
 type FieldInfo struct {
@@ -413,8 +469,7 @@ var luaRoot string
 var xlsxRoot string
 var langRoot string
 var resChan chan Result
-var xlsxMap map[string]string
-var luaMap map[string]string
+var xlsxSlice []XlsxPath
 
 func main() {
 	flag.StringVar(&xlsxRoot, "i", "", "输入路径")
@@ -426,23 +481,31 @@ func main() {
 		return
 	}
 
-	luaMap = make(map[string]string)
-	xlsxMap = make(map[string]string)
+	xlsxSlice = make([]XlsxPath, 0, 100)
 
 	startTime := time.Now()
-	//walkLua(luaRoot)
 	walkXlsx(xlsxRoot)
-	resChan = make(chan Result, len(xlsxMap))
-	fmt.Println("正在生成，请稍后……")
-	for path, f := range xlsxMap {
-		go loadXlsx(path, f)
+
+	//f, err := os.Create("cpu-profile.prof")
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+	//pprof.StartCPUProfile(f)
+
+	count := len(xlsxSlice)
+	resChan = make(chan Result, count)
+	fmt.Println("正在生成，请稍后……,条目=", count)
+	for _, xp := range xlsxSlice {
+		go loadXlsx(xp.PathName, xp.FileName)
 	}
 
-	resSlice := make([]Result, 0, len(xlsxMap))
-	for i := 0; i < len(xlsxMap); i++ {
+	resSlice := make([]Result, 0, count)
+	for i := 0; i < count; i++ {
 		res := <-resChan
 		resSlice = append(resSlice, res)
 	}
+
+	//pprof.StopCPUProfile()
 
 	msec := GetDurationMs(startTime)
 	printResult(resSlice, msec)
@@ -466,7 +529,7 @@ func printResult(resSlice []Result, msec int) {
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
 			color.Unset()
 		} else {
-			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
+			fmt.Printf("%-60s %-s %5sms\n", res.Name, res.ErrMsg, strconv.Itoa(res.Msec))
 		}
 	}
 
