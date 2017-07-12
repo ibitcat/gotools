@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Luxurioust/excelize"
 	"github.com/fatih/color"
+	"github.com/xuri/excelize"
 )
 
 const (
@@ -535,6 +535,28 @@ func printResult(resSlice []Result, msec int) {
 
 	if allOk {
 		fmt.Printf("生成完毕，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
+
+		// 清除废弃的lua
+		/*
+			fmt.Printf("开始清除废弃的lua文件……\n\n")
+			for _, lua := range luaSlice {
+				p := strings.TrimSuffix(lua.PathName, "lua")
+				p = strings.TrimPrefix(p, "l-")
+				xlsxdir := p + "xlsx"
+				found := false
+				for _, xlxs := range xlsxSlice {
+					if xlxs.PathName == xlsxdir {
+						found = true
+						break
+					}
+				}
+				if !found {
+					fmt.Printf("删除lua文件[%s]\n", lua.PathName)
+					os.Remove(lua.PathName)
+				}
+			}
+			fmt.Println("清除废弃的lua文件完毕！")
+		*/
 	} else {
 		color.Set(color.FgRed)
 		fmt.Printf("生成有错误，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
