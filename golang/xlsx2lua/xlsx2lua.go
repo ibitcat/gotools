@@ -7,6 +7,7 @@ brief：xlsx转lua工具，支持id重复检测，支持json格式错误检测�
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -435,12 +436,49 @@ func walkXlsx(path string) {
 				return nil
 			}
 
-			xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name()})
+			xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name(), uint64(f.ModTime().UnixNano() / 1000000)})
 			return nil
 		}
 		return mErr
 	})
 	checkErr(err)
+}
+
+func loadLastModTime() {
+	file, ferr := os.Open("lastModTime.txt")
+	if ferr != nil {
+		color.Red("注意：全部重新生成!!!")
+		needForce = true
+		os.RemoveAll(luaRoot)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) > 0 {
+			s := strings.Split(line, "|")
+			if len(s) == 2 {
+				tm, _ := strconv.ParseUint(s[1], 10, 64)
+				lastModTime[s[0]] = tm
+			}
+		}
+	}
+}
+
+func saveLastModTime() {
+	outFile, operr := os.OpenFile("lastModTime.txt", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+	checkErr(operr)
+	defer outFile.Close()
+
+	modTimes := make([]string, 0, len(xlsxSlice))
+	for _, xp := range xlsxSlice {
+		modTimes = append(modTimes, xp.PathName+"|"+strconv.FormatUint(xp.ModTime, 10))
+	}
+
+	outFile.WriteString(strings.Join(modTimes, "\n"))
+	outFile.Sync()
 }
 
 type ErrorInfo struct {
@@ -457,6 +495,7 @@ type Result struct {
 type XlsxPath struct {
 	PathName string
 	FileName string
+	ModTime  uint64
 }
 
 type FieldInfo struct {
@@ -470,6 +509,8 @@ var xlsxRoot string
 var langRoot string
 var resChan chan Result
 var xlsxSlice []XlsxPath
+var lastModTime map[string]uint64
+var needForce bool = false
 
 func main() {
 	flag.StringVar(&xlsxRoot, "i", "", "输入路径")
@@ -482,9 +523,12 @@ func main() {
 	}
 
 	xlsxSlice = make([]XlsxPath, 0, 100)
-
 	startTime := time.Now()
 	walkXlsx(xlsxRoot)
+
+	// 最后modify的时间
+	lastModTime = make(map[string]uint64, len(xlsxRoot))
+	loadLastModTime()
 
 	//f, err := os.Create("cpu-profile.prof")
 	//if err != nil {
@@ -492,23 +536,42 @@ func main() {
 	//}
 	//pprof.StartCPUProfile(f)
 
-	count := len(xlsxSlice)
-	resChan = make(chan Result, count)
-	fmt.Println("正在生成，请稍后……,条目=", count)
+	// 找到有变化的
+	changedXlsx := make([]XlsxPath, 0, len(xlsxSlice))
 	for _, xp := range xlsxSlice {
-		go loadXlsx(xp.PathName, xp.FileName)
+		lastModTm, ok := lastModTime[xp.PathName]
+		if ok && lastModTm == xp.ModTime {
+			//xlsxSlice = append(xlsxSlice[:i], xlsxSlice[i+1:]...)
+			//fmt.Println(xp.PathName + "无变化")
+		} else {
+			if !needForce {
+				color.Red("[有变化的文件]： " + xp.PathName)
+			}
+			changedXlsx = append(changedXlsx, xp)
+		}
 	}
 
-	resSlice := make([]Result, 0, count)
-	for i := 0; i < count; i++ {
-		res := <-resChan
-		resSlice = append(resSlice, res)
+	count := len(changedXlsx)
+	if count > 0 {
+		resChan = make(chan Result, count)
+		fmt.Println("正在生成，请稍后……,条目=", count)
+		for _, xp := range changedXlsx {
+			go loadXlsx(xp.PathName, xp.FileName)
+		}
+
+		resSlice := make([]Result, 0, count)
+		for i := 0; i < count; i++ {
+			res := <-resChan
+			resSlice = append(resSlice, res)
+		}
+
+		msec := GetDurationMs(startTime)
+		printResult(resSlice, msec)
+	} else {
+		color.Green("无需生成^_^")
 	}
 
 	//pprof.StopCPUProfile()
-
-	msec := GetDurationMs(startTime)
-	printResult(resSlice, msec)
 }
 
 func printResult(resSlice []Result, msec int) {
@@ -557,6 +620,7 @@ func printResult(resSlice []Result, msec int) {
 			}
 			fmt.Println("清除废弃的lua文件完毕！")
 		*/
+		saveLastModTime()
 	} else {
 		color.Set(color.FgRed)
 		fmt.Printf("生成有错误，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
