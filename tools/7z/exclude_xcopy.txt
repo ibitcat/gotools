@@ -1,0 +1,5 @@
+﻿
+.exe
+.txt
+\xlsx2lua\xlsx2lua
+\mergedb\mergedb

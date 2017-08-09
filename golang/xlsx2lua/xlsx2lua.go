@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -44,6 +45,20 @@ func checkErr(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func checkJson(text string) error {
+	var temp interface{}
+	err := json.Unmarshal([]byte(text), &temp)
+	if err == nil {
+		switch temp.(type) {
+		case map[string]interface{}:
+		case []interface{}:
+		default:
+			err = errors.New("json格式错误")
+		}
+	}
+	return err
 }
 
 // 获取文件名
@@ -255,8 +270,7 @@ forLable:
 							if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
 								trCell := langSheet[rId][cId]
 								if len(trCell) > 0 {
-									var temp interface{}
-									err := json.Unmarshal([]byte(trCell), &temp)
+									err := checkJson(text)
 									if err != nil {
 										errInfo.Level = E_ERROR
 										errInfo.ErrMsg = fmt.Sprintf("翻译json格式错误,第%d行,字段%s", rId+1, f.Name)
@@ -265,8 +279,7 @@ forLable:
 								}
 							}
 						} else {
-							var temp interface{}
-							err := json.Unmarshal([]byte(text), &temp)
+							err := checkJson(text)
 							if err != nil {
 								errInfo.Level = E_ERROR
 								errInfo.ErrMsg = fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
