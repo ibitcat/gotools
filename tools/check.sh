@@ -1,7 +1,7 @@
 #!/bin/bash
 
 arr=( "w" "m" "g" "d" "l" )
-path="/root/server/l-src/mmo"
+path="$HOME/server/l-src/mmo"
 
 echo ""
 echo "-------- check process ----------"
