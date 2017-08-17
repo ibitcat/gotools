@@ -458,9 +458,15 @@ func walkXlsx(path string) {
 }
 
 func loadLastModTime() {
+	_, err := os.Stat(luaRoot)
+	if os.IsNotExist(err) {
+		// 输出文件夹不存在
+		needForce = true
+		return
+	}
+
 	file, ferr := os.Open("lastModTime.txt")
 	if ferr != nil {
-		color.Red("注意：全部重新生成!!!")
 		needForce = true
 		os.RemoveAll(luaRoot)
 		return
@@ -523,7 +529,7 @@ var langRoot string
 var resChan chan Result
 var xlsxSlice []XlsxPath
 var lastModTime map[string]uint64
-var needForce bool = false
+var needForce bool = false //是否需要全部重新生成
 
 func main() {
 	flag.StringVar(&xlsxRoot, "i", "", "输入路径")
@@ -550,17 +556,21 @@ func main() {
 	//pprof.StartCPUProfile(f)
 
 	// 找到有变化的
-	changedXlsx := make([]XlsxPath, 0, len(xlsxSlice))
-	for _, xp := range xlsxSlice {
-		lastModTm, ok := lastModTime[xp.PathName]
-		if ok && lastModTm == xp.ModTime {
-			//xlsxSlice = append(xlsxSlice[:i], xlsxSlice[i+1:]...)
-			//fmt.Println(xp.PathName + "无变化")
-		} else {
-			if !needForce {
+	var changedXlsx []XlsxPath
+	if needForce {
+		color.Red("注意：全部重新生成!!!")
+		changedXlsx = xlsxSlice
+	} else {
+		changedXlsx = make([]XlsxPath, 0, len(xlsxSlice))
+		for _, xp := range xlsxSlice {
+			lastModTm, ok := lastModTime[xp.PathName]
+			if ok && lastModTm == xp.ModTime {
+				//xlsxSlice = append(xlsxSlice[:i], xlsxSlice[i+1:]...)
+				//fmt.Println(xp.PathName + "无变化")
+			} else {
 				color.Red("[有变化的文件]： " + xp.PathName)
+				changedXlsx = append(changedXlsx, xp)
 			}
-			changedXlsx = append(changedXlsx, xp)
 		}
 	}
 
