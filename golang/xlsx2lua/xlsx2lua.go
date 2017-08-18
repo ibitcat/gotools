@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -459,7 +460,8 @@ func walkXlsx(path string) {
 
 func loadLastModTime() {
 	_, err := os.Stat(luaRoot)
-	if os.IsNotExist(err) {
+	notExist := os.IsNotExist(err)
+	if notExist {
 		// 输出文件夹不存在
 		needForce = true
 		return
@@ -468,7 +470,16 @@ func loadLastModTime() {
 	file, ferr := os.Open("lastModTime.txt")
 	if ferr != nil {
 		needForce = true
-		os.RemoveAll(luaRoot)
+		if runtime.GOOS == "windows" {
+			os.RemoveAll(luaRoot)
+		} else {
+			if !notExist {
+				cmdstr := fmt.Sprintf(`find %s/|grep -E "%s/[A-Za-z]+"|grep -v ".svn"|xargs rm -rf`, luaRoot, luaRoot)
+				cmd := exec.Command("sh", "-c", cmdstr)
+				err = cmd.Run()
+				checkErr(err)
+			}
+		}
 		return
 	}
 	defer file.Close()
@@ -548,6 +559,9 @@ func main() {
 	// 最后modify的时间
 	lastModTime = make(map[string]uint64, len(xlsxRoot))
 	loadLastModTime()
+	if true {
+		return
+	}
 
 	//f, err := os.Create("cpu-profile.prof")
 	//if err != nil {
