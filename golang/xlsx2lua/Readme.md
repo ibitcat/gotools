@@ -1,4 +1,4 @@
-##excel 转lua配置
+## excel 转lua配置
 
 xlsx 文件格式如下图：  
 ![模板](xlsx.jpg)  
@@ -38,3 +38,9 @@ xlsx 文件格式如下图：
 `xlsx2lua.exe -i xlsx -o l-xlsx -l language/en`
 
 注意：linux与windows区别在，路径斜杠和反斜杠的问题，请注意。
+
+go生成的可执行文件有点大，可以采用下面两个步骤减小二进制文件大小。
+
+1. 在build时，加入参数`go build -ldflags "-w -s"` 
+2. 使用upx加壳压缩
+
