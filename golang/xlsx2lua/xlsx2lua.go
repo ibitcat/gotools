@@ -145,22 +145,24 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 		}
 
 		// 字段通用检查
-		if len(fieldName) > 0 {
-			if strings.Contains(fieldName, " ") {
-				return ErrorInfo{E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)}, nil
+		if modeType != "r" {
+			if len(fieldName) > 0 {
+				if strings.Contains(fieldName, " ") {
+					return ErrorInfo{E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)}, nil
+				}
+				if modeType != "c" && modeType != "s" && modeType != "d" {
+					return ErrorInfo{E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)}, nil
+				}
+				if len(fieldType) == 0 {
+					return ErrorInfo{E_ERROR, "字段类型不存在"}, nil
+				}
+				Field[i] = FieldInfo{fieldName, fieldType, modeType}
+			} else {
+				if len(modeType) > 0 || len(fieldType) > 0 {
+					return ErrorInfo{E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)}, nil
+				}
+				break
 			}
-			if modeType != "c" && modeType != "s" && modeType != "d" {
-				return ErrorInfo{E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)}, nil
-			}
-			if len(fieldType) == 0 {
-				return ErrorInfo{E_ERROR, "字段类型不存在"}, nil
-			}
-			Field[i] = FieldInfo{fieldName, fieldType, modeType}
-		} else {
-			if len(modeType) > 0 || len(fieldType) > 0 {
-				return ErrorInfo{E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)}, nil
-			}
-			break
 		}
 	}
 
@@ -474,7 +476,7 @@ func loadLastModTime() {
 			os.RemoveAll(luaRoot)
 		} else {
 			if !notExist {
-				cmdstr := fmt.Sprintf(`find %s/|grep -E "%s/[A-Za-z]+"|grep -v ".svn"|xargs rm -rf`, luaRoot, luaRoot)
+				cmdstr := fmt.Sprintf(`find %s -type f -name "*.lua"|xargs rm -rf`, luaRoot)
 				cmd := exec.Command("sh", "-c", cmdstr)
 				err = cmd.Run()
 				checkErr(err)
@@ -559,9 +561,6 @@ func main() {
 	// 最后modify的时间
 	lastModTime = make(map[string]uint64, len(xlsxRoot))
 	loadLastModTime()
-	if true {
-		return
-	}
 
 	//f, err := os.Create("cpu-profile.prof")
 	//if err != nil {
