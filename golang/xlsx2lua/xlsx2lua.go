@@ -218,7 +218,12 @@ func parseToLua(xlsxpath string, file string, workSheet [][]string, Field map[in
 			if (f.Mode == "s" || f.Mode == "d") && f.Type == "string" {
 				needTrans = true
 				langSheet, fieldRef, idRef = loadLang(xlsxpath) // 读取翻译文件
-				re = regexp.MustCompile(`%[a-z]`)               // 匹配占位符
+				if langSheet == nil || len(langSheet) == 0 {
+					errInfo.Level = E_ERROR
+					errInfo.ErrMsg = "翻译文件错误"
+					return
+				}
+				re = regexp.MustCompile(`%[a-z]`) // 匹配占位符
 				break
 			}
 		}
