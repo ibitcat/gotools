@@ -29,13 +29,13 @@ xlsx 文件格式如下图：
 例子：
 
 ***windows：***  
-`xlsx2lua.exe -i xlsx -o l-xlsx -l language\en`
+`xlsx2lua.exe -i xlsx -o l-xlsx -l language`
 
-表示 将`xlsx/`文件夹下的所有xlsx装换成lua，lua文件的输出路径为`/l-xlsx`,并且在转换的同时翻译相关字段，翻译文件的路径为：`language\en`
+表示 将`xlsx/`文件夹下的所有xlsx装换成lua，lua文件的输出路径为`/l-xlsx`,并且在转换的同时翻译相关字段，翻译文件的路径为：`language`
 
 
 ***linux:***  
-`xlsx2lua.exe -i xlsx -o l-xlsx -l language/en`
+`xlsx2lua.exe -i xlsx -o l-xlsx -l language`
 
 注意：linux与windows区别在，路径斜杠和反斜杠的问题，请注意。
 
@@ -49,3 +49,7 @@ go生成的可执行文件有点大，可以采用下面两个步骤减小二进
 - 2017-10-23
 
 	1. 增加新的字段生成方式r（remark）,表示这个字段服务器和客户端都不需要生成，只是用来做备注，给策划或开发看的。
+
+- 2017-11-27
+
+	1. 优化翻译处理，工具自动搜索翻译文件目录

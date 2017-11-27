@@ -12,6 +12,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -465,6 +466,41 @@ func walkXlsx(path string) {
 	checkErr(err)
 }
 
+func findLangDir() error {
+	if len(langRoot) > 0 {
+		dir, err := ioutil.ReadDir(langRoot)
+		if err != nil {
+			return err
+		}
+
+		var realDir string
+		for _, fi := range dir {
+			if fi.IsDir() {
+				dirRoot := langRoot + "/" + fi.Name()
+				filepath.Walk(dirRoot, func(path string, f os.FileInfo, err error) error {
+					if !f.IsDir() {
+						ok, mErr := filepath.Match("$*.xlsx", f.Name())
+						if ok {
+							realDir = fi.Name()
+							return nil
+						}
+						return mErr
+					}
+					return nil
+				})
+			}
+		}
+
+		if len(realDir) > 0 {
+			langRoot += ("/" + realDir)
+			fmt.Println("翻译文件目录：", langRoot)
+			return nil
+		}
+		return errors.New("翻译目录错误")
+	}
+	return nil
+}
+
 func loadLastModTime() {
 	_, err := os.Stat(luaRoot)
 	notExist := os.IsNotExist(err)
@@ -556,6 +592,12 @@ func main() {
 	flag.Parse()
 	if len(luaRoot) == 0 || len(xlsxRoot) == 0 {
 		color.Red("输入路径或输出路径为空")
+		return
+	}
+
+	err := findLangDir()
+	if err != nil {
+		color.Red(err.Error())
 		return
 	}
 
