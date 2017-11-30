@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/fatih/color"
 	"github.com/xuri/excelize"
@@ -47,6 +48,15 @@ func checkErr(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func IsChineseChar(str string) bool {
+	for _, r := range str {
+		if unicode.Is(unicode.Scripts["Han"], r) {
+			return true
+		}
+	}
+	return false
 }
 
 func checkJson(text string) error {
@@ -271,29 +281,32 @@ forLable:
 						continue
 					}
 
-					// json格式是否正确
-					if f.Type == "table" {
-						if needTrans {
-							rId, rOk := idRef[id]
-							cId, cOk := fieldRef[f.Name]
-							if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
-								trCell := langSheet[rId][cId]
-								if len(trCell) > 0 {
-									err := checkJson(text)
-									if err != nil {
-										errInfo.Level = E_ERROR
-										errInfo.ErrMsg = fmt.Sprintf("翻译json格式错误,第%d行,字段%s", rId+1, f.Name)
-										return
-									}
+					// 替换成翻译内容
+					baseText := text
+					if needTrans && (f.Type == "table" || f.Type == "string") {
+						rId, rOk := idRef[id]
+						cId, cOk := fieldRef[f.Name]
+						if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
+							trCell := langSheet[rId][cId]
+							if len(trCell) > 0 {
+								text = trCell
+							} else {
+								if IsChineseChar(text) {
+									errInfo.Level = E_ERROR
+									errInfo.ErrMsg = fmt.Sprintf("翻译缺失,id=%s,字段%s", id, f.Name)
+									return
 								}
 							}
-						} else {
-							err := checkJson(text)
-							if err != nil {
-								errInfo.Level = E_ERROR
-								errInfo.ErrMsg = fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
-								return
-							}
+						}
+					}
+
+					// json格式是否正确
+					if f.Type == "table" {
+						err := checkJson(text)
+						if err != nil {
+							errInfo.Level = E_ERROR
+							errInfo.ErrMsg = fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
+							return
 						}
 					}
 
@@ -309,29 +322,17 @@ forLable:
 								text = strings.Replace(text, "\n", "", -1)
 							} else if f.Type == "string" { // ' 替换成 \'
 								// 翻译
-								if needTrans {
-									rId, rOk := idRef[id]
-									cId, cOk := fieldRef[f.Name]
-									if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
-										trCell := langSheet[rId][cId]
-										if len(trCell) > 0 {
-											checkOk := true
-											if file == "string.xlsx" ||
-												file == "error.xlsx" {
-												reSlice1 := re.FindAllString(text, -1)
-												reSlice2 := re.FindAllString(trCell, -1)
-												if !checkTranslation(reSlice1, reSlice2) {
-													errInfo.Level = E_ERROR
-													errInfo.ErrMsg = fmt.Sprintf("翻译错误,id=%s,字段%s", id, f.Name)
-													checkOk = false
-												}
-											}
-											if checkOk {
-												text = trCell
-											}
-										}
+								if needTrans && (file == "string.xlsx" || file == "error.xlsx") {
+									reSlice1 := re.FindAllString(baseText, -1)
+									reSlice2 := re.FindAllString(text, -1)
+									if !checkTranslation(reSlice1, reSlice2) {
+										errInfo.Level = E_ERROR
+										errInfo.ErrMsg = fmt.Sprintf("翻译错误,id=%s,字段%s", id, f.Name)
+										return
 									}
 								}
+
+								// 替换单引号
 								text = strings.Replace(text, "'", `\'`, -1)
 							}
 							str = fmt.Sprintf("        ['%s'] = '%s',", f.Name, text)
@@ -493,7 +494,7 @@ func findLangDir() error {
 
 		if len(realDir) > 0 {
 			langRoot += ("/" + realDir)
-			fmt.Println("翻译文件目录：", langRoot)
+			color.Yellow("翻译文件目录： %s", langRoot)
 			return nil
 		}
 		return errors.New("翻译目录错误")
