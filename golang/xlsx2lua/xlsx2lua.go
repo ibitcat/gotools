@@ -59,6 +59,28 @@ func IsChineseChar(str string) bool {
 	return false
 }
 
+func checkAscii(srcStr, desStr string) bool {
+	srcBytes := make([]byte, 0, len(srcStr))
+	for _, r := range srcStr {
+		if r <= 0x7f {
+			srcBytes = append(srcBytes, byte(r))
+		}
+	}
+	if len(srcBytes) > 0 {
+		var idx int = 0
+		for _, r := range desStr {
+			if r <= 0x7f && byte(r) == srcBytes[idx] {
+				idx++
+			}
+		}
+		if len(srcBytes) != idx {
+			//fmt.Println(len(srcBytes), idx, string(srcBytes))
+			return false
+		}
+	}
+	return true
+}
+
 func checkJson(text string) error {
 	var temp interface{}
 	err := json.Unmarshal([]byte(text), &temp)
@@ -289,6 +311,13 @@ forLable:
 						if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
 							trCell := langSheet[rId][cId]
 							if len(trCell) > 0 {
+								// 对比英文字符对不对
+								if !checkAscii(text, trCell) {
+									errInfo.Level = E_ERROR
+									errInfo.ErrMsg = fmt.Sprintf("翻译内容不匹配,id=%s,字段%s,源=%s,翻译=%s", id, f.Name, text, trCell)
+									return
+								}
+
 								text = trCell
 							} else {
 								if IsChineseChar(text) {
@@ -460,7 +489,9 @@ func walkXlsx(path string) {
 				return nil
 			}
 
+			//if f.Name() == "activity.xlsx" {
 			xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name(), uint64(f.ModTime().UnixNano() / 1000000)})
+			//}
 			return nil
 		}
 		return mErr
