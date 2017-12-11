@@ -181,17 +181,17 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 }
 
 // 检查能否翻译
-func checkTranslation(src, dst []string) bool {
+func checkTranslation(src, dst []string) (bool, string) {
 	if len(src) != len(dst) {
-		return false
+		return false, "占位符个数不匹配"
 	}
 
 	for i, v := range src {
 		if v != dst[i] {
-			return false
+			return false, fmt.Sprintf("第%d个占位符不匹配", i+1)
 		}
 	}
-	return true
+	return true, ""
 }
 
 // 解析成lua格式
@@ -283,7 +283,7 @@ forLable:
 
 					// 替换成翻译内容
 					baseText := text
-					if needTrans && (f.Type == "table" || f.Type == "string") {
+					if needTrans && (f.Type == "table" || f.Type == "string" || f.Type == "object") {
 						rId, rOk := idRef[id]
 						cId, cOk := fieldRef[f.Name]
 						if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
@@ -325,9 +325,10 @@ forLable:
 								if needTrans && (file == "string.xlsx" || file == "error.xlsx") {
 									reSlice1 := re.FindAllString(baseText, -1)
 									reSlice2 := re.FindAllString(text, -1)
-									if !checkTranslation(reSlice1, reSlice2) {
+									result, errstr := checkTranslation(reSlice1, reSlice2)
+									if !result {
 										errInfo.Level = E_ERROR
-										errInfo.ErrMsg = fmt.Sprintf("翻译错误,id=%s,字段%s", id, f.Name)
+										errInfo.ErrMsg = fmt.Sprintf("翻译占位符错误,id=%s,字段%s,err=%s", id, f.Name, errstr)
 										return
 									}
 								}
