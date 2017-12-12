@@ -62,19 +62,23 @@ func IsChineseChar(str string) bool {
 func checkAscii(srcStr, desStr string) bool {
 	srcBytes := make([]byte, 0, len(srcStr))
 	for _, r := range srcStr {
-		if r <= 0x7f {
+		if r > 0x20 && r <= 0x7f && r != 0x2C && r != 0x2e { //忽略中英文逗号、句号的区别
 			srcBytes = append(srcBytes, byte(r))
 		}
 	}
-	if len(srcBytes) > 0 {
+	byteLen := len(srcBytes)
+	if byteLen > 0 {
 		var idx int = 0
 		for _, r := range desStr {
-			if r <= 0x7f && byte(r) == srcBytes[idx] {
+			if r > 0x20 && r <= 0x7f && byte(r) == srcBytes[idx] {
 				idx++
+				if idx >= byteLen {
+					break
+				}
 			}
 		}
-		if len(srcBytes) != idx {
-			//fmt.Println(len(srcBytes), idx, string(srcBytes))
+		if byteLen != idx {
+			//fmt.Println(byteLen, idx, string(srcBytes))
 			return false
 		}
 	}
