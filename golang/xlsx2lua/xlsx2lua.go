@@ -312,7 +312,7 @@ forLable:
 							trCell := langSheet[rId][cId]
 							if len(trCell) > 0 {
 								// 对比英文字符对不对
-								if !checkAscii(text, trCell) {
+								if len(specFile) > 0 && !checkAscii(text, trCell) {
 									errInfo.Level = E_ERROR
 									errInfo.ErrMsg = fmt.Sprintf("翻译内容不匹配,id=%s,字段%s,源=%s,翻译=%s", id, f.Name, text, trCell)
 									return
@@ -489,9 +489,9 @@ func walkXlsx(path string) {
 				return nil
 			}
 
-			//if f.Name() == "activity.xlsx" {
-			xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name(), uint64(f.ModTime().UnixNano() / 1000000)})
-			//}
+			if len(specFile) == 0 || (len(specFile) > 0 && f.Name() == specFile) {
+				xlsxSlice = append(xlsxSlice, XlsxPath{path, f.Name(), uint64(f.ModTime().UnixNano() / 1000000)})
+			}
 			return nil
 		}
 		return mErr
@@ -613,6 +613,7 @@ type FieldInfo struct {
 var luaRoot string
 var xlsxRoot string
 var langRoot string
+var specFile string // 生成指定的文件
 var resChan chan Result
 var xlsxSlice []XlsxPath
 var lastModTime map[string]uint64
@@ -622,6 +623,7 @@ func main() {
 	flag.StringVar(&xlsxRoot, "i", "", "输入路径")
 	flag.StringVar(&luaRoot, "o", "", "输出路径")
 	flag.StringVar(&langRoot, "l", "", "翻译文件路径")
+	flag.StringVar(&specFile, "file", "", "指定生成某个文件")
 	flag.Parse()
 	if len(luaRoot) == 0 || len(xlsxRoot) == 0 {
 		color.Red("输入路径或输出路径为空")
@@ -633,6 +635,7 @@ func main() {
 		color.Red(err.Error())
 		return
 	}
+	fmt.Println("file = ", specFile)
 
 	xlsxSlice = make([]XlsxPath, 0, 100)
 	startTime := time.Now()
