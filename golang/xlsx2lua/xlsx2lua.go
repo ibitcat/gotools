@@ -635,7 +635,6 @@ func main() {
 		color.Red(err.Error())
 		return
 	}
-	fmt.Println("file = ", specFile)
 
 	xlsxSlice = make([]XlsxPath, 0, 100)
 	startTime := time.Now()
