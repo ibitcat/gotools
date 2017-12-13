@@ -41,7 +41,9 @@ xlsx 文件格式如下图：
 注意：linux与windows区别在，路径斜杠和反斜杠的问题，请注意。
 
 
-生成的lua文件格式：
+生成的lua文件格式如下：
+
+实例： `material.lua`
 
 ```lua
 return {
