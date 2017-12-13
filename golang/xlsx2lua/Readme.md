@@ -43,34 +43,45 @@ xlsx 文件格式如下图：
 
 生成的lua文件格式如下：
 
-实例： `material.lua`
+实例： `equipment.lua`
 
 ```lua
 return {
 -- 具体的配置内容
 {
-    [202000] = {
-        ['id'] = 202000,
-        ['name'] = '各部位装备锻造书',
-        ['mainclass'] = 2,
-        ['subclass'] = 2,
+    [100001] = {
+        ['id'] = 100001,
+        ['name'] = '普通·见习之剑',
+        ['mainclass'] = 1,
+        ['subclass'] = 1,
+        ['place'] = 1,
+        ['entryId'] = 1,
         ['turnLevel'] = 0,
         ['level'] = 1,
-        ['quality'] = 4,
+        ['quality'] = 1,
         ['abandon'] = 1,
-        ['overlay'] = 99,
-        ['sellMoney'] = 100,
+        ['overlay'] = 1,
+        ['addnMin'] = 0,
+        ['addnMax'] = 0,
+        ['basePropFixed'] = '[["pAttackUpper",[1,1,0],[1,1,0],[1,1,0],[1,1,100]]]',
+        ['addiPropFixed'] = '[["pAttackUpper",1,1,3]]',
     },
-    [201057] = {
-        ['id'] = 201057,
-        ['name'] = '20级主手锻造书',
-        ['mainclass'] = 2,
-        ['subclass'] = 2,
+    [100002] = {
+        ['id'] = 100002,
+        ['name'] = '优秀·见习之剑',
+        ['mainclass'] = 1,
+        ['subclass'] = 1,
+        ['place'] = 1,
+        ['entryId'] = 1,
         ['turnLevel'] = 0,
-        ['level'] = 20,
-        ['quality'] = 3,
+        ['level'] = 1,
+        ['quality'] = 2,
         ['abandon'] = 1,
-        ['overlay'] = 99,
+        ['overlay'] = 1,
+        ['addnMin'] = 1,
+        ['addnMax'] = 1,
+        ['basePropFixed'] = '[["pAttackUpper",[1,1,0],[1,1,0],[1,1,0],[1,1,100]]]',
+        ['addiPropFixed'] = '[["pAttackUpper",1,1,3]]',
     },
 },
 
