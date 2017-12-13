@@ -23,6 +23,7 @@ xlsx 文件格式如下图：
 - -i xxx 表示xlsx文件路径
 - -o yyy 表示生成lua文件的路径
 - -l aaa 表示翻译文件路径 （为了本地化，不填则不翻译）
+- -file bbb.xlsx 表示只生成指定excel文件
 
 > 翻译的原理是：在生成lua的同时，检查字段是否是string并且模式是s或者d，然后检查该字段是否有相应的翻译字符串对应，如果有则替换。
 
@@ -39,13 +40,70 @@ xlsx 文件格式如下图：
 
 注意：linux与windows区别在，路径斜杠和反斜杠的问题，请注意。
 
+
+生成的lua文件格式：
+
+```lua
+return {
+-- 具体的配置内容
+{
+    [202000] = {
+        ['id'] = 202000,
+        ['name'] = '各部位装备锻造书',
+        ['mainclass'] = 2,
+        ['subclass'] = 2,
+        ['turnLevel'] = 0,
+        ['level'] = 1,
+        ['quality'] = 4,
+        ['abandon'] = 1,
+        ['overlay'] = 99,
+        ['sellMoney'] = 100,
+    },
+    [201057] = {
+        ['id'] = 201057,
+        ['name'] = '20级主手锻造书',
+        ['mainclass'] = 2,
+        ['subclass'] = 2,
+        ['turnLevel'] = 0,
+        ['level'] = 20,
+        ['quality'] = 3,
+        ['abandon'] = 1,
+        ['overlay'] = 99,
+    },
+},
+
+-- 服务器用到的字段
+{
+    ['id'] = 'int',
+    ['name'] = 'string',
+    ['mainclass'] = 'int',
+    ['subclass'] = 'int',
+    ['turnLevel'] = 'int',
+    ['level'] = 'int',
+    ['quality'] = 'int',
+    ['abandon'] = 'int',
+    ['timeLimit'] = 'int',
+    ['overlay'] = 'int',
+    ['sortweight'] = 'int',
+    ['alchemy'] = 'int',
+    ['exp'] = 'int',
+    ['glyphExp'] = 'int',
+    ['sellMoney'] = 'int',
+},
+
+-- 配置主键
+'id'
+}
+```
+
 ## 压缩
 go生成的可执行文件有点大，可以采用下面两个步骤减小二进制文件大小。
 
 1. 在build时，加入参数`go build -ldflags "-w -s"` 
 2. 使用upx加壳压缩
 
-**log**
+## log
+
 - 2017-10-23
 
 	1. 增加新的字段生成方式r（remark）,表示这个字段服务器和客户端都不需要生成，只是用来做备注，给策划或开发看的。
