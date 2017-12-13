@@ -24,8 +24,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/fatih/color"
-	"github.com/xuri/excelize"
 )
 
 const (
@@ -134,7 +134,9 @@ func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
 		return nil, nil, nil
 	}
 
-	sheet := xlFile.GetRows("Sheet1")
+	//sheetName := strings.TrimSuffix(p, ".xlsx")
+	sheetName := xlFile.GetSheetName(1)
+	sheet := xlFile.GetRows(sheetName)
 	FieldRef := make(map[string]int)
 	IdRef := make(map[string]int)
 	for i, row := range sheet {
@@ -464,7 +466,8 @@ func loadXlsx(xlsxpath string, file string) {
 	}
 
 	// 第一个sheet为配置
-	workSheet := xlFile.GetRows("Sheet1")
+	sheetName := xlFile.GetSheetName(1)
+	workSheet := xlFile.GetRows(sheetName) //sheetName = "Sheet1"
 	if len(workSheet) < 4 {
 		errInfo.Level = E_ERROR
 		errInfo.ErrMsg = "配置头至少要4行"
