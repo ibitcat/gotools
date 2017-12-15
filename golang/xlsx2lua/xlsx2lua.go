@@ -99,6 +99,20 @@ func checkJson(text string) error {
 	return err
 }
 
+// 检查能否翻译
+func checkTranslation(src, dst []string) (bool, string) {
+	if len(src) != len(dst) {
+		return false, "占位符个数不匹配"
+	}
+
+	for i, v := range src {
+		if v != dst[i] {
+			return false, fmt.Sprintf("第%d个占位符不匹配", i+1)
+		}
+	}
+	return true, ""
+}
+
 // 获取文件名
 func getFileName(file string) string {
 	return strings.TrimSuffix(file, ".xlsx")
@@ -120,7 +134,8 @@ func removeLua(xlsxpath string, file string) {
 	os.Remove(luaFile)
 }
 
-func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
+// 读取翻译xlsx文件
+func loadLangXlsx(xlsxpath string) *LangSheet {
 	p := strings.TrimPrefix(xlsxpath, xlsxRoot)
 	sep := "/"
 	if runtime.GOOS == "windows" {
@@ -131,32 +146,43 @@ func loadLang(xlsxpath string) ([][]string, map[string]int, map[string]int) {
 
 	xlFile, err := excelize.OpenFile(langFile)
 	if err != nil {
-		return nil, nil, nil
+		return nil
 	}
 
 	//sheetName := strings.TrimSuffix(p, ".xlsx")
 	sheetName := xlFile.GetSheetName(1)
 	sheet := xlFile.GetRows(sheetName)
-	FieldRef := make(map[string]int)
-	IdRef := make(map[string]int)
+	langSheet := &LangSheet{
+		SheetRows: sheet,
+		FieldRef:  make(map[string]int),
+		IdRef:     make(map[string]int),
+	}
+
 	for i, row := range sheet {
 		if i == 0 { //第一行
 			for j, text := range row {
 				if strings.Contains(text, "_翻译") {
 					fieldName := strings.TrimRight(text, "_翻译")
-					if _, ok := FieldRef[fieldName]; ok {
-						FieldRef[fieldName] = j
-					}
-				} else {
-					FieldRef[text] = j
+					langSheet.FieldRef[fieldName] = j
 				}
 			}
 		} else {
-			IdRef[row[0]] = i
+			langSheet.IdRef[row[0]] = i
 		}
 	}
 
-	return sheet, FieldRef, IdRef
+	return langSheet
+}
+
+func getLangCell(langSheet *LangSheet, id, field string) string {
+	if langSheet != nil {
+		rId, rOk := langSheet.IdRef[id]
+		cId, cOk := langSheet.FieldRef[field]
+		if rOk && cOk {
+			return langSheet.SheetRows[rId][cId]
+		}
+	}
+	return ""
 }
 
 // 解析配置头
@@ -165,10 +191,10 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 	typeRow := workSheet[2]  //字段类型
 	modeRow := workSheet[3]  //生成方式
 	if len(fieldRow) == 0 {
-		return ErrorInfo{E_ERROR, "字段名为空"}, nil
+		return ErrorInfo{E_ERROR, "[配置头错误]:配置字段名为空"}, nil
 	}
 
-	Field := make(map[int]FieldInfo, 50) //最多50个字段
+	Field := make(map[int]FieldInfo, 50)
 	for i, fieldName := range fieldRow {
 		fieldType := typeRow[i]
 		modeType := modeRow[i]
@@ -176,10 +202,10 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 		// 检测key字段
 		if i == 0 { //字段行的第一个字段为配置的key,需要检查下
 			if len(fieldName) == 0 {
-				return ErrorInfo{E_ERROR, "配置没有key"}, nil
+				return ErrorInfo{E_ERROR, "[配置头错误]:配置没有key"}, nil
 			}
 			if fieldType != "int" && fieldType != "string" {
-				return ErrorInfo{E_ERROR, "id字段类型错误"}, nil
+				return ErrorInfo{E_ERROR, "[配置头错误]:id字段类型错误"}, nil
 			}
 		}
 
@@ -187,18 +213,18 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 		if modeType != "r" {
 			if len(fieldName) > 0 {
 				if strings.Contains(fieldName, " ") {
-					return ErrorInfo{E_ERROR, fmt.Sprintf("字段名[%s]有空格", fieldName)}, nil
+					return ErrorInfo{E_ERROR, fmt.Sprintf("[配置头错误]:字段[%s]有空格", fieldName)}, nil
 				}
 				if modeType != "c" && modeType != "s" && modeType != "d" {
-					return ErrorInfo{E_ERROR, fmt.Sprintf("字段[%s]生成方式错误", fieldName)}, nil
+					return ErrorInfo{E_ERROR, fmt.Sprintf("[配置头错误]:字段[%s]生成方式错误", fieldName)}, nil
 				}
 				if len(fieldType) == 0 {
-					return ErrorInfo{E_ERROR, "字段类型不存在"}, nil
+					return ErrorInfo{E_ERROR, fmt.Sprintf("[配置头错误]:字段[%s]类型不存在", fieldName)}, nil
 				}
 				Field[i] = FieldInfo{fieldName, fieldType, modeType}
 			} else {
 				if len(modeType) > 0 || len(fieldType) > 0 {
-					return ErrorInfo{E_ERROR, fmt.Sprintf("第%d个字段名为空", i+1)}, nil
+					return ErrorInfo{E_ERROR, fmt.Sprintf("[配置头错误]:第[%d]个字段名为空", i+1)}, nil
 				}
 				break
 			}
@@ -206,20 +232,6 @@ func loadXlsxHead(workSheet [][]string) (ErrorInfo, map[int]FieldInfo) {
 	}
 
 	return ErrorInfo{E_NONE, "OK"}, Field
-}
-
-// 检查能否翻译
-func checkTranslation(src, dst []string) (bool, string) {
-	if len(src) != len(dst) {
-		return false, "占位符个数不匹配"
-	}
-
-	for i, v := range src {
-		if v != dst[i] {
-			return false, fmt.Sprintf("第%d个占位符不匹配", i+1)
-		}
-	}
-	return true, ""
 }
 
 // 解析成lua格式
@@ -237,6 +249,29 @@ func parseToLua(xlsxpath string, file string, workSheet [][]string, Field map[in
 
 		checkOnly = true //客户端配置，仅需要检查json格式
 	}
+
+	// 检查翻译文件
+	needTrans := false
+	var langSheet *LangSheet
+	var re *regexp.Regexp = nil
+	if len(langRoot) > 0 {
+		for _, f := range Field {
+			if f.Mode == "s" || f.Mode == "d" {
+				needTrans = true                   // 配置是否需要翻译
+				langSheet = loadLangXlsx(xlsxpath) // 读取翻译文件
+				if langSheet != nil && len(langSheet.SheetRows) == 0 {
+					errInfo.Level = E_ERROR
+					errInfo.ErrMsg = "[翻译错误]:翻译文件错误"
+					return
+				}
+				if file == "string.xlsx" || file == "error.xlsx" {
+					re = regexp.MustCompile(`%[a-z]`) // 匹配占位符
+				}
+				break
+			}
+		}
+	}
+
 	if !checkOnly {
 		sliceLen := len(workSheet) * (len(Field) + 2)
 		rowsSlice = make([]string, 0, sliceLen)
@@ -245,27 +280,6 @@ func parseToLua(xlsxpath string, file string, workSheet [][]string, Field map[in
 		// 配置
 		rowsSlice = append(rowsSlice, "return {")
 		rowsSlice = append(rowsSlice, "{")
-	}
-
-	// 配置是否需要翻译
-	needTrans := false
-	var fieldRef, idRef map[string]int
-	var langSheet [][]string
-	var re *regexp.Regexp
-	if len(langRoot) > 0 {
-		for _, f := range Field {
-			if (f.Mode == "s" || f.Mode == "d") && f.Type == "string" {
-				needTrans = true
-				langSheet, fieldRef, idRef = loadLang(xlsxpath) // 读取翻译文件
-				if langSheet != nil && len(langSheet) == 0 {
-					errInfo.Level = E_ERROR
-					errInfo.ErrMsg = "翻译文件错误"
-					return
-				}
-				re = regexp.MustCompile(`%[a-z]`) // 匹配占位符
-				break
-			}
-		}
 	}
 
 	// 从配置的第4行开始解析
@@ -278,30 +292,28 @@ forLable:
 			for idx, text := range row {
 				// fields
 				if f, ok := Field[idx]; ok {
-					// key 字段
-					if idx == 0 {
+					if idx == 0 { // key 字段
 						id = text
-						if len(text) == 0 { //如果key字段的值为空，则停止解析配置
+						if len(id) == 0 { //如果key字段的值为空，则停止解析配置
 							break forLable
 						} else {
-							if _, ok := idMap[text]; ok {
+							if _, ok := idMap[id]; ok {
 								errInfo.Level = E_ERROR
-								errInfo.ErrMsg = fmt.Sprintf("id重复,第%d行,id=%s", i+1, text)
+								errInfo.ErrMsg = fmt.Sprintf("[配置错误 id=%s,行=%s]:id重复", id, i+1)
 								return
 							} else {
 								idMap[text] = true
 							}
+						}
 
-							if !checkOnly {
-								var str string
-								if f.Type == "int" {
-									str = fmt.Sprintf("    [%s] = {", text)
-								} else {
-									str = fmt.Sprintf("    ['%s'] = {", text)
-								}
-
-								rowsSlice = append(rowsSlice, str)
+						if !checkOnly {
+							var str string
+							if f.Type == "int" {
+								str = fmt.Sprintf("    [%s] = {", text)
+							} else {
+								str = fmt.Sprintf("    ['%s'] = {", text)
 							}
+							rowsSlice = append(rowsSlice, str)
 						}
 					}
 
@@ -309,44 +321,37 @@ forLable:
 						continue
 					}
 
-					// 替换成翻译内容
-					baseText := text
-					if needTrans && (f.Type == "table" || f.Type == "string" || f.Type == "object") {
-						rId, rOk := idRef[id]
-						cId, cOk := fieldRef[f.Name]
-						if rOk && cOk && len(langSheet) > rId && len(langSheet[rId]) > cId {
-							trCell := langSheet[rId][cId]
-							if len(trCell) > 0 {
-								// 对比英文字符对不对
-								if len(specFile) > 0 && !checkAscii(text, trCell) {
-									errInfo.Level = E_ERROR
-									errInfo.ErrMsg = fmt.Sprintf("翻译内容不匹配,id=%s,字段%s,源=%s,翻译=%s", id, f.Name, text, trCell)
-									return
-								}
-
-								text = trCell
-							} else {
-								if IsChineseChar(text) {
-									errInfo.Level = E_ERROR
-									errInfo.ErrMsg = fmt.Sprintf("翻译缺失,id=%s,字段%s", id, f.Name)
-									return
-								}
-							}
-						}
-					}
-
 					// json格式是否正确
 					if f.Type == "table" {
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
-							errInfo.ErrMsg = fmt.Sprintf("json格式错误,第%d行,字段%s", i+1, f.Name)
+							errInfo.ErrMsg = fmt.Sprintf("[配置错误 id=%s,字段=%s]:json格式错误", id, f.Name)
 							return
 						}
 					}
 
 					// 只生成服务器需要的字段
 					if !checkOnly && (f.Mode == "s" || f.Mode == "d") {
+						baseText := text // 替换成翻译内容
+						if needTrans && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
+							trCell := getLangCell(langSheet, id, f.Name)
+							if len(trCell) > 0 {
+								// 对比英文字符对不对
+								if len(specFile) > 0 && !checkAscii(text, trCell) {
+									errInfo.Level = E_ERROR
+									errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译内容不匹配,源=%s,翻译=%s", id, f.Name, text, trCell)
+									return
+								}
+								text = trCell
+							} else {
+								if IsChineseChar(text) {
+									errInfo.Level = E_ERROR
+									errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译缺失", id, f.Name)
+								}
+							}
+						}
+
 						var str string
 						if f.Type == "int" || f.Type == "number" {
 							str = fmt.Sprintf("        ['%s'] = %s,", f.Name, text)
@@ -357,19 +362,17 @@ forLable:
 								text = strings.Replace(text, "\n", "", -1)
 							} else if f.Type == "string" { // ' 替换成 \'
 								// 翻译
-								if needTrans && (file == "string.xlsx" || file == "error.xlsx") {
+								if needTrans && re != nil {
 									reSlice1 := re.FindAllString(baseText, -1)
 									reSlice2 := re.FindAllString(text, -1)
 									result, errstr := checkTranslation(reSlice1, reSlice2)
 									if !result {
 										errInfo.Level = E_ERROR
-										errInfo.ErrMsg = fmt.Sprintf("翻译占位符错误,id=%s,字段%s,err=%s", id, f.Name, errstr)
+										errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译占位符错误,err=%s", id, f.Name, errstr)
 										return
 									}
 								}
-
-								// 替换单引号
-								text = strings.Replace(text, "'", `\'`, -1)
+								text = strings.Replace(text, "'", `\'`, -1) // 替换单引号
 							}
 							str = fmt.Sprintf("        ['%s'] = '%s',", f.Name, text)
 						}
@@ -617,9 +620,15 @@ type FieldInfo struct {
 	Mode string
 }
 
+type LangSheet struct {
+	SheetRows [][]string     // 翻译文件xlsx数据
+	FieldRef  map[string]int // 翻译字段反索引
+	IdRef     map[string]int // 翻译id反索引
+}
+
 var luaRoot string
 var xlsxRoot string
-var langRoot string
+var langRoot string // 翻译文件根目录
 var specFile string // 生成指定的文件
 var resChan chan Result
 var xlsxSlice []XlsxPath
@@ -723,28 +732,6 @@ func printResult(resSlice []Result, msec int) {
 
 	if allOk {
 		fmt.Printf("生成完毕，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
-
-		// 清除废弃的lua
-		/*
-			fmt.Printf("开始清除废弃的lua文件……\n\n")
-			for _, lua := range luaSlice {
-				p := strings.TrimSuffix(lua.PathName, "lua")
-				p = strings.TrimPrefix(p, "l-")
-				xlsxdir := p + "xlsx"
-				found := false
-				for _, xlxs := range xlsxSlice {
-					if xlxs.PathName == xlsxdir {
-						found = true
-						break
-					}
-				}
-				if !found {
-					fmt.Printf("删除lua文件[%s]\n", lua.PathName)
-					os.Remove(lua.PathName)
-				}
-			}
-			fmt.Println("清除废弃的lua文件完毕！")
-		*/
 		saveLastModTime()
 	} else {
 		color.Set(color.FgRed)
