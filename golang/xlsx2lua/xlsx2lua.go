@@ -322,10 +322,13 @@ forLable:
 						continue
 					}
 
+					var baseText string
+					isSvrField := (f.Mode == "s" || f.Mode == "d") // 服务器字段
+
 					// 翻译对比
-					baseText := text
 					if needTrans && f.Mode != "r" && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
 						trCell := getLangCell(langSheet, id, f.Name)
+						baseText = text
 						if len(trCell) > 0 {
 							// 对比英文字符对不对
 							if len(specFile) > 0 && !checkAscii(text, trCell) {
@@ -343,7 +346,7 @@ forLable:
 					}
 
 					// json格式是否正确
-					if f.Type == "table" || (f.Type == "object" && (f.Mode == "s" || f.Mode == "d")) {
+					if f.Type == "table" || (f.Type == "object" && isSvrField) {
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
@@ -353,7 +356,7 @@ forLable:
 					}
 
 					// 只生成服务器需要的字段
-					if !checkOnly && (f.Mode == "s" || f.Mode == "d") {
+					if !checkOnly && isSvrField {
 						var str string
 						if f.Type == "int" || f.Type == "number" {
 							str = fmt.Sprintf("        ['%s'] = %s,", f.Name, text)
