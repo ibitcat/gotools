@@ -300,7 +300,7 @@ forLable:
 						} else {
 							if _, ok := idMap[id]; ok {
 								errInfo.Level = E_ERROR
-								errInfo.ErrMsg = fmt.Sprintf("[配置错误 id=%s,行=%s]:id重复", id, i+1)
+								errInfo.ErrMsg = fmt.Sprintf("[id重复 id=%s,行=%s]", id, i+1)
 								return
 							} else {
 								idMap[text] = true
@@ -330,14 +330,14 @@ forLable:
 							// 对比英文字符对不对
 							if len(specFile) > 0 && !checkAscii(text, trCell) {
 								errInfo.Level = E_ERROR
-								errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译内容不匹配,源=%s,翻译=%s", id, f.Name, text, trCell)
+								errInfo.ErrMsg = fmt.Sprintf("[翻译内容不匹配 id=%s,字段=%s]:源=%s,翻译=%s", id, f.Name, text, trCell)
 								return
 							}
 							text = trCell // 替换成翻译内容
 						} else {
 							if IsChineseChar(text) {
 								errInfo.Level = E_WARN
-								errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失", id, f.Name)
+								errInfo.ErrMsg = fmt.Sprintf("[翻译缺失 id=%s,字段=%s]", id, f.Name)
 							}
 						}
 					}
@@ -370,7 +370,7 @@ forLable:
 									result, errstr := checkTranslation(reSlice1, reSlice2)
 									if !result {
 										errInfo.Level = E_ERROR
-										errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译占位符错误,err=%s", id, f.Name, errstr)
+										errInfo.ErrMsg = fmt.Sprintf("[翻译占位符错误 id=%s,字段=%s],err=%s", id, f.Name, errstr)
 										return
 									}
 								}
