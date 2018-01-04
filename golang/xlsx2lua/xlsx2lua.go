@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	E_NONE = iota
-	E_WARN
-	E_ERROR
+	E_NONE   = iota
+	E_NOTICE //通知
+	E_WARN   //警告
+	E_ERROR  //错误
 )
 
 func GetFullPath(path string) string {
@@ -244,7 +245,7 @@ func parseToLua(xlsxpath string, file string, workSheet [][]string, Field map[in
 	checkOnly := false
 	if keyField.Mode != "s" && keyField.Mode != "d" {
 		removeLua(xlsxpath, file)
-		errInfo.Level = E_WARN
+		errInfo.Level = E_NOTICE
 		errInfo.ErrMsg = "不需要生成"
 
 		checkOnly = true //客户端配置，仅需要检查json格式
@@ -322,7 +323,7 @@ forLable:
 					}
 
 					// json格式是否正确
-					if f.Type == "table" {
+					if f.Type == "table" || f.Type == "object" {
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
@@ -346,8 +347,8 @@ forLable:
 								text = trCell
 							} else {
 								if IsChineseChar(text) {
-									errInfo.Level = E_ERROR
-									errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译缺失", id, f.Name)
+									errInfo.Level = E_WARN
+									errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失(策划自行斟酌)", id, f.Name)
 								}
 							}
 						}
@@ -712,16 +713,19 @@ func printResult(resSlice []Result, msec int) {
 	fmt.Println("生成结束，结果如下：")
 
 	sort.Slice(resSlice, func(i, j int) bool { return resSlice[i].Name < resSlice[j].Name })
-	allOk := true
+	result := 0 //0=全部ok，1=有警告，2=有错误
 	for _, res := range resSlice {
-		if res.Level == 1 { //警告
+		if res.Level == E_NOTICE { //通知
+			color.Set(color.FgCyan)
+			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
+			color.Unset()
+		} else if res.Level == E_WARN { //警告
 			color.Set(color.FgYellow)
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
 			color.Unset()
-		} else if res.Level == 2 { //错误
-			if allOk {
-				allOk = false
-			}
+			result |= 1
+		} else if res.Level == E_ERROR { //错误
+			result |= 2
 			color.Set(color.FgRed)
 			fmt.Printf("%-60s %-s\n", res.Name, res.ErrMsg)
 			color.Unset()
@@ -730,12 +734,17 @@ func printResult(resSlice []Result, msec int) {
 		}
 	}
 
-	if allOk {
+	if result == 0 {
+		color.Set(color.FgGreen)
 		fmt.Printf("生成完毕，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
+		saveLastModTime()
+	} else if result == 1 {
+		color.Set(color.FgYellow)
+		fmt.Printf("生成有警告，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
 		saveLastModTime()
 	} else {
 		color.Set(color.FgRed)
 		fmt.Printf("生成有错误，条目=%d，耗时=%d 毫秒 ！\n", len(resSlice), msec)
-		color.Unset()
 	}
+	color.Unset()
 }
