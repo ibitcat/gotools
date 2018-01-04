@@ -324,7 +324,7 @@ forLable:
 
 					// 翻译对比
 					baseText := text
-					if needTrans && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
+					if needTrans && f.Mode != "r" && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
 						trCell := getLangCell(langSheet, id, f.Name)
 						if len(trCell) > 0 {
 							// 对比英文字符对不对
@@ -343,7 +343,7 @@ forLable:
 					}
 
 					// json格式是否正确
-					if f.Type == "table" || f.Type == "object" {
+					if f.Type == "table" || (f.Type == "object" && (f.Mode == "s" || f.Mode == "d")) {
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
