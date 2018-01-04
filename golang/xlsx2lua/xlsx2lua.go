@@ -322,6 +322,26 @@ forLable:
 						continue
 					}
 
+					// 翻译对比
+					baseText := text
+					if needTrans && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
+						trCell := getLangCell(langSheet, id, f.Name)
+						if len(trCell) > 0 {
+							// 对比英文字符对不对
+							if len(specFile) > 0 && !checkAscii(text, trCell) {
+								errInfo.Level = E_ERROR
+								errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译内容不匹配,源=%s,翻译=%s", id, f.Name, text, trCell)
+								return
+							}
+							text = trCell // 替换成翻译内容
+						} else {
+							if IsChineseChar(text) {
+								errInfo.Level = E_WARN
+								errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失(策划自行斟酌)", id, f.Name)
+							}
+						}
+					}
+
 					// json格式是否正确
 					if f.Type == "table" || f.Type == "object" {
 						err := checkJson(text)
@@ -334,25 +354,6 @@ forLable:
 
 					// 只生成服务器需要的字段
 					if !checkOnly && (f.Mode == "s" || f.Mode == "d") {
-						baseText := text // 替换成翻译内容
-						if needTrans && (f.Type == "table" || f.Type == "object" || f.Type == "string") {
-							trCell := getLangCell(langSheet, id, f.Name)
-							if len(trCell) > 0 {
-								// 对比英文字符对不对
-								if len(specFile) > 0 && !checkAscii(text, trCell) {
-									errInfo.Level = E_ERROR
-									errInfo.ErrMsg = fmt.Sprintf("[翻译错误 id=%s,字段=%s]:翻译内容不匹配,源=%s,翻译=%s", id, f.Name, text, trCell)
-									return
-								}
-								text = trCell
-							} else {
-								if IsChineseChar(text) {
-									errInfo.Level = E_WARN
-									errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失(策划自行斟酌)", id, f.Name)
-								}
-							}
-						}
-
 						var str string
 						if f.Type == "int" || f.Type == "number" {
 							str = fmt.Sprintf("        ['%s'] = %s,", f.Name, text)
