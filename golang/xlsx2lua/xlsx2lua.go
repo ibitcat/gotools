@@ -343,9 +343,8 @@ forLable:
 						}
 					}
 
-					isSvrField := (f.Mode == "s" || f.Mode == "d") // 服务器字段
 					// json格式是否正确
-					if f.Type == "table" || (f.Type == "object" && isSvrField) {
+					if f.Type == "table" || f.Type == "object" {
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
@@ -355,6 +354,7 @@ forLable:
 					}
 
 					// 只生成服务器需要的字段
+					isSvrField := (f.Mode == "s" || f.Mode == "d") // 服务器字段
 					if !checkOnly && isSvrField {
 						var str string
 						if f.Type == "int" || f.Type == "number" {
