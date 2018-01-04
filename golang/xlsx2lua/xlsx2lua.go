@@ -337,7 +337,7 @@ forLable:
 						} else {
 							if IsChineseChar(text) {
 								errInfo.Level = E_WARN
-								errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失(策划自行斟酌)", id, f.Name)
+								errInfo.ErrMsg = fmt.Sprintf("[翻译警告 id=%s,字段=%s]:翻译缺失", id, f.Name)
 							}
 						}
 					}
@@ -347,7 +347,7 @@ forLable:
 						err := checkJson(text)
 						if err != nil {
 							errInfo.Level = E_ERROR
-							errInfo.ErrMsg = fmt.Sprintf("[配置错误 id=%s,字段=%s]:json格式错误", id, f.Name)
+							errInfo.ErrMsg = fmt.Sprintf("[json格式错误 id=%s,字段=%s]", id, f.Name)
 							return
 						}
 					}
