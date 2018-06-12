@@ -8,19 +8,15 @@ BT.RUNNING = "RUNNING"	--运行中
 
 -- 行为树
 oo.class("BehaviourTree")
-function BehaviourTree:__init(owner,root)
-	assert(owner)
+function BehaviourTree:__init(brain,root)
+	assert(brain)
 	assert(root)
-	self._owner = owner 		--该行为树的拥有者
+	self._brain = brain 		--该行为树的拥有者
 	self._root = root 			--行为树根节点
 	self._forceupdate = false	--是否强制更新ai
 
 	-- 设置每个行为树节点拥有者
-	self._root:setOwner(owner)
-end
-
-function BehaviourTree:getOwner()
-	return self._owner
+	self._root:setBrain(brain)
 end
 
 -- 强制更新行为树
@@ -28,10 +24,16 @@ function BehaviourTree:forceUpdate()
 	self._forceupdate = true
 end
 
+function BehaviourTree:toString()
+	local verStr = '\n[' .. Utils.formatTime().."] Think Ver: " .. (self._brain._thinkVersion)..'\n'
+	local treeStr = self._root:getTreeString()
+	--print("bt root update: ",env.unixtimeMs(), self._root._status, self._root._doEval, self._root._idx)
+	print(verStr..treeStr)
+end
+
 function BehaviourTree:update()
 	self._root:visit()
-	--print(self._root:getTreeString())
-	print("bt root update: ",env.unixtimeMs(), self._root._status, self._root._doEval, self._root._idx)
+	--self:toString()
 	self._root:saveStatus()
 	self._root:step()
 
@@ -53,6 +55,6 @@ function BehaviourTree:getSleepTime()
 	if self._forceupdate then
 		return 0
 	end
-	
+
 	return self._root:getTreeSleepTime()
 end

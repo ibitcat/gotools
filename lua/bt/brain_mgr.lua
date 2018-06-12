@@ -1,4 +1,5 @@
 -- 大脑管理器
+-- 暂无用
 
 oo.single("BrainMgr")
 function BrainMgr:init()
@@ -46,9 +47,9 @@ function BrainMgr:sendToList(brain, list, val)
 			end
 			old_list[brain] = nil
 		end
-		
+
 		self._brains[brain] = list
-		
+
 		if list then
 			list[brain] = val or true
 		end
@@ -84,7 +85,7 @@ end
 function BrainMgr:think(brain)
 	assert(brain)
 	brain:onUpdate() --大脑思考一次
-		
+
 	local sleep_amount = brain:getSleepTime()
 	if sleep_amount then
 		sleep_amount = sleep_amount>=10 and sleep_amount or 10 --必须是10ms的倍数

@@ -17,14 +17,14 @@
 
 
 -- 行为树节点父类
--- _needOwner 表示只有跟业务耦合的节点才需要，比如定制的gohome节点、逻辑先关的事件节点
+-- _needBrain 只有跟业务耦合的节点才需要，表示是否需要大脑，比如定制的gohome节点、逻辑先关的事件节点
 -- 而其他中间节点，则与业务无关，它们只负责决策的走向，所以不需要owner，
 -- 这样可以少一点owner的标记，减少gc
 oo.class("BehaviourNode")
 function BehaviourNode:__init(children, need)
 	self._parent = nil
-	self._owner = nil
-	self._needOwner = need 			--是否需要owner
+	self._brain = nil
+	self._needBrain = need 			--是否需要实体的brain
 	self._kind = "BehaviourNode"	--行为树节点种类
 	self._nextUpdatetime = nil		--下一次更新时间
 	self._children = children 		--子节点列表(数组)
@@ -39,23 +39,30 @@ function BehaviourNode:__init(children, need)
 	end
 end
 
-function BehaviourNode:setOwner(owner)
-	if self._needOwner then
-		self._owner = owner
-		if self.onSetOwner then
-			self:onSetOwner()
+function BehaviourNode:setBrain(brain)
+	if self._needBrain then
+		self._brain = brain
+		if self.onSetBrain then
+			self:onSetBrain()
 		end
 	end
 
 	if self._children then
 		for k,child in ipairs(self._children) do
-			child:setOwner(owner)
+			child:setBrain(brain)
 		end
 	end
 end
 
+function BehaviourNode:getBrain()
+	return self._brain
+end
+
 function BehaviourNode:getOwner()
-	return self._owner
+	local brain = self:getBrain()
+	if brain then
+		return brain:getOwner()
+	end
 end
 
 function BehaviourNode:iskindof(k)
@@ -75,13 +82,13 @@ end
 function BehaviourNode:sleep(t)
 	assert(t>=10)
 	assert(not self._children,"叶子节点才能睡眠")
-	self._nextUpdatetime = env.unixtimeMs() + t 
+	self._nextUpdatetime = env.unixtimeMs() + t
 end
 
 -- 只有处于运行中的叶子节点才有睡眠时间
 function BehaviourNode:getSleepTime()
 	-- 该节点正在运行并且没有子节点（也就是到了树的叶子节点），并且不是条件节点(其实就是行为节点)
-	if self._status == BT.RUNNING 
+	if self._status == BT.RUNNING
 		and not self._children
 		and not self:iskindof("ConditionNode") then
 		if self._nextUpdatetime then
@@ -115,19 +122,19 @@ function BehaviourNode:getTreeSleepTime()
 	return sleeptime
 end
 
-function BehaviourNode:dbString()
+function BehaviourNode:toString()
 	return ""
 end
 
 function BehaviourNode:getString()
 	local str = ""
 	if self._status == BT.RUNNING then
-		str = self:dbString()
+		str = self:toString()
 	end
 	if #str>0 then
-		return string.format([[%s:[%s<--%s]:(%s)]], self._kind, self._status or "UNKNOWN", self._lastresult or "?", str)
+		return string.format([[%s:[%s-->%s]:(%s)]], self._kind, self._lastresult or "?", self._status or "UNKNOWN", str)
 	else
-		return string.format("%s:[%s<--%s]", self._kind, self._status or "UNKNOWN", self._lastresult or "?")
+		return string.format("%s:[%s-->%s]", self._kind, self._lastresult or "?", self._status or "UNKNOWN")
 	end
 end
 
@@ -271,7 +278,7 @@ function TimeDecorator:visit()
 	if self._any then
 		if self._status == BT.SUCCESS or self._status == BT.FAILED then
 			self._nextTime = ctm + self._waitTime
-		end 
+		end
 	else
 		if self._status == BT.SUCCESS then
 			self._nextTime = ctm + self._waitTime
@@ -343,15 +350,15 @@ function ActionNode:visit()
 	self._status = BT.SUCCESS
 end
 
--- doAction
+-- ActionDrtNode ，ActionNode装饰节点
 -- 根据action的返回结果，决定该节点的状态
-oo.class("DoActionNode","ActionNode")
-function DoActionNode:__init(action, resetFn)
+oo.class("ActionDrtNode","ActionNode")
+function ActionDrtNode:__init(action, resetFn)
 	ActionNode.__init(self, action, resetFn)
-	self._kind = "DoActionNode"
+	self._kind = "ActionDrtNode"
 end
 
-function DoActionNode:visit()
+function ActionDrtNode:visit()
 	local ok = self._action()
 	if ok then
 		self._status = BT.SUCCESS
@@ -405,7 +412,7 @@ function SequenceNode:reset()
 	BehaviourNode.reset(self)
 end
 
-function SequenceNode:dbString()
+function SequenceNode:toString()
 	return tostring(self._idx)
 end
 
@@ -452,7 +459,7 @@ function SelectorNode:reset()
 	BehaviourNode.reset(self)
 end
 
-function SelectorNode:dbString()
+function SelectorNode:toString()
 	return tostring(self._idx)
 end
 
@@ -463,9 +470,9 @@ end
 如果子节点是success或者running，则运行下一个子节点；
 如果所有子节点都为success，则将自身设置为success并返回，否则设置自身为running。
 在运行到该节点时，要对部分节点(ConditionNode、NotDecorator)做重置，重启判断。
-ps:这里的实现的其实是Parallel Sequence Node，如果子节点failed,则返回
+ps:这里的实现的其实是Parallel Sequence Node，如果子节点failed,则返回。
 并行节点可以设置退出条件，参考：
-http://www.cnblogs.com/hammerc/p/5044815.html 
+http://www.cnblogs.com/hammerc/p/5044815.html
 --]]
 oo.class("ParallelNode","BehaviourNode")
 function ParallelNode:__init(children)
@@ -481,7 +488,7 @@ function ParallelNode:visit()
 		if child:iskindof("ConditionNode") then --重启条件节点
 			child:reset()
 		end
-		
+
 		if child._status~=BT.SUCCESS then
 			child:visit()
 			if child._status == BT.FAILED then
@@ -489,7 +496,7 @@ function ParallelNode:visit()
 				return
 			end
 		end
-		
+
 		if child._status == BT.RUNNING then
 			done = false
 		else -- success
@@ -501,7 +508,7 @@ function ParallelNode:visit()
 		self._status = BT.SUCCESS
 	else
 		self._status = BT.RUNNING
-	end    
+	end
 end
 
 -- 并行节点如果不在"运行中"，则重置条件子节点
@@ -528,7 +535,7 @@ end
 --注意：while节点的每一次思考，都会重启条件节点的判断，这与if节点不同。
 oo.class("WhileNode","ParallelNode")
 function WhileNode:__init(condFunc,node)
-	local condNode = ConditionNode(condFunc)
+	local condNode = ConditionNode:new(condFunc)
 	ParallelNode.__init(self,{condNode,node})
 	self._kind = "WhileNode"
 end
@@ -541,7 +548,7 @@ end
 oo.class("IfNode","SequenceNode")
 function IfNode:__init(condFunc,node)
 	assert(node)
-	local children = {ConditionNode(condFunc),node}
+	local children = {ConditionNode:new(condFunc),node}
 	SequenceNode.__init(self, children)
 	self._kind = "IfNode"
 end
@@ -562,7 +569,7 @@ end
 oo.class("IfElseNode","BehaviourNode")
 function IfElseNode:__init(condFunc,okNode,elseNode)
 	assert(elseNode)
-	BehaviourNode.__init(self, {ConditionNode(condFunc), okNode, elseNode})
+	BehaviourNode.__init(self, {ConditionNode:new(condFunc), okNode, elseNode})
 	self._kind = "IfElseNode"
 end
 
@@ -598,13 +605,13 @@ oo.class("WaitNode","BehaviourNode")
 function WaitNode:__init(time)
 	BehaviourNode.__init(self)
 	self._kind = "WaitNode"
-	self._waitTime = time   --等待时间(ms)
+	self._waitTime = time   --等待时间间隔(ms)
 	self._wakeTime = nil    --唤醒时间
 end
 
-function WaitNode:dbString()
-	local w = self._waitTime - env.unixtimeMs()
-	return string.format("%d",w)
+function WaitNode:toString()
+	local w = self._wakeTime - env.unixtimeMs()
+	return string.format("%.f",w)
 end
 
 function WaitNode:visit()
@@ -640,7 +647,7 @@ function LoopNode:__init(children,maxreps,maxrepFn)
 	self._fn = maxrepFn				--用来动态设置最大循环次数
 end
 
-function LoopNode:dbString()
+function LoopNode:toString()
 	return tostring(self._idx)
 end
 
@@ -670,7 +677,7 @@ function LoopNode:visit()
 		self._status = BT.SUCCESS
 		return
 	end
-	
+
 	local done = false
 	local count = #self._children
 	local childStatus
@@ -682,10 +689,10 @@ function LoopNode:visit()
 			self._status = childStatus
 			return
 		end
-		
+
 		self._idx = self._idx + 1
-	end 
-	
+	end
+
 	self._idx = 1               --一次loop完毕
 	self._rep = self._rep + 1   --loop次数+1
 	if self._rep >= self._maxreps then
@@ -710,12 +717,12 @@ function PriorityNode:__init(children,period)
 	self._doEval = false
 end
 
-function PriorityNode:dbString()
+function PriorityNode:toString()
 	local time_till = 0
 	if self._period then
 		time_till = (self._lastTime or 0) + self._period - env.unixtimeMs()
 	end
-	
+
 	return string.format("idx=%d,eval=%d", self._idx or -1, time_till)
 end
 
@@ -723,7 +730,7 @@ function PriorityNode:getSleepTime()
 	if not self._period then
 		return 0
 	end
-	
+
 	local timeTo = 0 --到期时间
 	if self._lastTime then
 		timeTo = (self._lastTime + self._period) - env.unixtimeMs()
@@ -752,10 +759,11 @@ end
 -- self._lastTime 如果为nil，则表示重新开始执行该节点
 function PriorityNode:visit()
 	local ctm = env.unixtimeMs()
-	local do_eval = not self._lastTime or self._lastTime + self._period <= ctm 
+	local do_eval = not self._lastTime or self._lastTime + self._period < ctm
 
 	self._doEval = do_eval
 	if do_eval then --从头开始评估(执行)子节点（这里相当于定时器，每隔self._period就执行一次）
+		--print("------------->do_eval")
 		local old_event = nil --子节点是否是eventnode
 		local eventChild = self._idx and self._children[self._idx]
 		if eventChild and eventChild:iskindof("EventNode") then
@@ -801,7 +809,7 @@ function PriorityNode:visit()
 				end
 			end
 		end
-	end  
+	end
 end
 
 ------------------------------------- 事件节点 -------------------------------------
@@ -817,15 +825,21 @@ function EventNode:__init(event, child, priority)
 	self._kind = "EventNode"
 end
 
-function EventNode:onSetOwner()
+function EventNode:onSetBrain()
 	if self._event then
-		self._owner:addEventListener(self, self._event, "onEvent")
+		local owner = self:getOwner()
+		if owner then
+			owner:addEventListener(self, self._event, "onEvent")
+		end
 	end
 end
 
 function EventNode:onStop()
-	if self._event and self._owner then
-		self._owner:removeEventListener(self)
+	if self._event then
+		local owner = self:getOwner()
+		if owner then
+			owner:removeEventListener(self)
+		end
 	end
 end
 
@@ -836,17 +850,17 @@ function EventNode:onEvent(data)
 
 	self._triggered = true
 	self._data = data
-	
+
 	-- 强制tick一次大脑
-	if self._owner._brain then
+	if self._brain then
 		--wake the parent!
-		self:doToParents(function(node) 
-			if node:iskindof("PriorityNode") then 
+		self:doToParents(function(node)
+			if node:iskindof("PriorityNode") then
 				node._lastTime = nil --让PriorityNode从头执行
-			end 
+			end
 		end)
 
-		self._owner._brain:forceUpdate()
+		self._brain:forceUpdate()
 	end
 end
 

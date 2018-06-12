@@ -5,8 +5,8 @@ local _skill_tusi = 100901001		--吐丝技能
 local _skill_zhuluan = 100903001 	--蛛卵技能
 
 oo.class("DuzhizhuBrain","Brain")
-function DuzhizhuBrain:__init(owner)
-	Brain.__init(self,owner)
+function DuzhizhuBrain:__init(owner, name, cnf)
+	Brain.__init(self,owner, name, cnf)
 end
 
 -- 死亡之后，清除召唤的小怪
@@ -38,5 +38,5 @@ function DuzhizhuBrain:onStart()
 		500
 	)
 
-    self._bt = BehaviourTree(self._owner, root)
+    self._bt = BehaviourTree(self, root)
 end
