@@ -135,3 +135,7 @@ for j=1,sn do
 end
 local hello,domi = pkt:unpacks(2)
 print(hello,domi)
+
+--等价于：
+pkt:reread()
+xprint(pkt:unpacks())
