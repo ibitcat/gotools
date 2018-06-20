@@ -298,6 +298,10 @@ static int lua_msgpack_pack_subpkt(lua_State *L){
 	int isAppend = luaL_optinteger(L, 3, 0); //是否是追加模式
 	int amt = 0;
 	if (isAppend!=0){
+		if (pkt->stacks == NULL){
+			lua_msgpack_error(L, "Append packet need wrap pre.");
+			return 0;
+		}
 		mp_buf_append(L, pkt, (const unsigned char*)subPkt->b, subPkt->len);
 		amt = 1;
 	}else{
