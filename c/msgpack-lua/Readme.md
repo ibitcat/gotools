@@ -44,7 +44,7 @@ local pkt1 = msgpack.newPacket()
 pkt1:packs(1,2,3,"haha")
 local pkt = msgpack.newPacket()
 pkt:packs("hello",1000) --可以pack基础类型的元素
-pkt:packPacket(pkt1)
+pkt:packPacket(pkt1) --如果第二个参数为1，表示是追加模式，某些时候比较有用，追加模式下，子包不是以字符串的方式传递
 
 local item1,item2 = pkt:unpacks(2) --取出前两个基础类型元素
 local subPkt = msgpack.newPacket()

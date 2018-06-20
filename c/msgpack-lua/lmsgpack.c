@@ -1,4 +1,3 @@
-// sudo apt-get install lua5.1-0-dev
 // gcc -c -g -Wall -I/usr/include/lua5.1 -fPIC cmsgpack.c
 // gcc -c -g -Wall -I/usr/include/lua5.1 -fPIC lmsgpack.c
 // gcc -Wall -fPIC -W -shared -o msgpack.so *.o
@@ -296,10 +295,18 @@ static int lua_msgpack_pack_subpkt(lua_State *L){
 		lua_msgpack_error(L, "Sub packet needs a msgpack.");
 	}
 
-	lua_pushlstring(L, (const char*)subPkt->b, subPkt->len);
-	lua_replace(L, 2);
+	int isAppend = luaL_optinteger(L, 3, 0); //是否是追加模式
+	int amt = 0;
+	if (isAppend!=0){
+		mp_buf_append(L, pkt, (const unsigned char*)subPkt->b, subPkt->len);
+		amt = 1;
+	}else{
+		lua_pushlstring(L, (const char*)subPkt->b, subPkt->len);
+		lua_replace(L, 2);
+		amt = mp_pack(L, pkt, 2, 2);
+	}
 
-	int amt = mp_pack(L, pkt, 2, 2);
+	// inc stack
 	if (pkt->wrap_stack_p > 0) {
 		uint8_t curIdx = pkt->wrap_stack_p - 1;
 		if (pkt->stacks[curIdx].len >= 0xffff) {
