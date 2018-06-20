@@ -1,1 +1,2 @@
-golang/mergeDB/mergeDB
+*.so
+*.o
