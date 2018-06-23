@@ -16,4 +16,4 @@
 
 直接运行`xlsxparse.bat`，生成ts配置时，需要配合`t-xlsx/ConfigParser.ts`。
 
-![参数](/xlsxparse.png)
+![参数](xlsxparse.png)
