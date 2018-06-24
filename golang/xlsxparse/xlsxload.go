@@ -17,6 +17,10 @@ var ConvTasks []*XlsxConv
 
 func loadLastModTime() {
 	LastModifyTime = make(map[string]uint64, 500)
+	if len(tsAbsRoot) > 0 {
+		return
+	}
+
 	file, err := os.Open(curAbsRoot + "\\lastModTime.txt")
 	if err != nil {
 		if runtime.GOOS == "windows" {

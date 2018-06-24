@@ -19,10 +19,12 @@ func main() {
 
 	flag.StringVar(&xlsxRoot, "i", "xlsx", "输入路径")
 	pLua := flag.String("lua", "l-xlsx", "lua 输出路径")
-	pTs := flag.String("ts", "t-xlsx", "ts 输出路径")
+	pTs := flag.String("ts", "", "ts 输出路径")
 	flag.Parse()
 	luaAbsRoot = curAbsRoot + "\\" + *pLua
-	tsAbsRoot = curAbsRoot + "\\" + *pTs
+	if len(*pTs) > 0 {
+		tsAbsRoot = curAbsRoot + "\\" + *pTs
+	}
 
 	startConv()
 }

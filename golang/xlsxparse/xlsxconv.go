@@ -146,11 +146,13 @@ func (c *XlsxConv) generate() {
 		return
 	}
 
-	// lua
-	c.parseToLua(workSheet)
-
-	// typescript
-	c.parseToTsDat(workSheet)
+	if len(tsAbsRoot) > 0 {
+		// typescript
+		c.parseToTsDat(workSheet)
+	} else {
+		// lua
+		c.parseToLua(workSheet)
+	}
 }
 
 // 开始生成
@@ -179,8 +181,12 @@ func startConv() {
 			<-ConvChan
 		}
 
-		genCliTsFile()
-		saveConvTime()
+		if len(tsAbsRoot) > 0 {
+			genCliTsFile()
+		} else {
+			saveConvTime()
+		}
+
 		printResult(startTime)
 	} else {
 		color.Green("无需生成^_^")
