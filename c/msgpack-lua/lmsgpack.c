@@ -118,13 +118,25 @@ static int lua_msgpacket_gc(lua_State *L){
 	return 0;
 }
 
+void lua_msgpack_incstack(lua_State *L, mp_buf* pkt, int n){
+	if (pkt->wrap_stack_p > 0) {
+		uint8_t curIdx = pkt->wrap_stack_p - 1;
+		if (pkt->stacks[curIdx].len >= 0xffff) {
+			lua_msgpack_error(L,"Pre pack wrap array max!!!");
+		}
+
+		// 当前层元素数量+n
+		pkt->stacks[curIdx].len += n;
+	}
+}
+
 static int lua_msgpack_wrap_pre(lua_State *L) {
 	mp_buf* pkt = lua_tompbuf(L,1);
 	if (!pkt) {
 		lua_msgpack_error(L,"Pack table needs a packet.");
 	}
 
-	int pos = mp_buf_get_write_pos(pkt);
+	int pos = pkt->len;
 	if (pkt->wrap_stack_p >= pkt->wrap_stack_n) {
 		uint32_t nn = pkt->wrap_stack_n + 2;
 		if (nn > 0xffff) {
@@ -138,15 +150,7 @@ static int lua_msgpack_wrap_pre(lua_State *L) {
 		pkt->wrap_stack_n = nn;
 	}
 
-	if (pkt->wrap_stack_p > 0) {
-		uint8_t preStack = pkt->wrap_stack_p - 1;
-		if (pkt->stacks[preStack].len >= 0xffff) {
-			lua_msgpack_error(L,"Pre pack wrap array max!!!");
-		}
-
-		// 上一层个数+1
-		++pkt->stacks[preStack].len;
-	}
+	lua_msgpack_incstack(L, pkt, 1);
 	uint16_t p = pkt->wrap_stack_p++;
 	pkt->stacks[p].pos = pos;
 	pkt->stacks[p].len = 0;
@@ -168,7 +172,7 @@ static int lua_msgpack_wrap_end(lua_State *L) {
 	const uint16_t p = pkt->wrap_stack_p - 1;
 	int wpos = pkt->stacks[p].pos;
 	int len = pkt->stacks[p].len;
-	int cpos = mp_buf_get_write_pos(pkt);
+	int cpos = pkt->len;
 	if (wpos > cpos) {
 		lua_msgpack_error(L,"lua_msgpack_wrap_end exepect wpos < cpos.");
 	}
@@ -186,7 +190,7 @@ static int lua_msgpack_wrap_end(lua_State *L) {
 		lua_msgpack_error(L,"lua_msgpack_wrap_end exepect wpos was mp_array16.");
 	}
 
-	mp_encode_array16(b, len);
+	mp_replace_array16(b, len);
 	pkt->wrap_stack_p = p;
 	return 0;
 }
@@ -204,17 +208,7 @@ static int lua_msgpack_wrap(lua_State *L) {
 
     mp_encode_array(L, pkt, nargs-1);
 	mp_pack(L, pkt, 2, nargs);
-
-    // stack
-    if (pkt->wrap_stack_p > 0) {
-    	uint8_t curIdx = pkt->wrap_stack_p - 1;
-		if (pkt->stacks[curIdx].len >= 0xffff) {
-			lua_msgpack_error(L,"Pre pack wrap array max!!!");
-		}
-
-		// 当前层元素数量+1
-		++pkt->stacks[curIdx].len;
-	}
+    lua_msgpack_incstack(L, pkt, 1);
     return 0;
 }
 
@@ -262,15 +256,7 @@ static int lua_msgpack_packs(lua_State *L) {
 	}
 
     int amt = mp_pack(L, pkt, 2, nargs);
-	if (pkt->wrap_stack_p > 0) {
-		uint8_t curIdx = pkt->wrap_stack_p - 1;
-		if (pkt->stacks[curIdx].len >= 0xffff) {
-			lua_msgpack_error(L,"Pre pack wrap array max!!!");
-		}
-
-		// 当前层元素数量+amt
-		pkt->stacks[curIdx].len += amt;
-	}
+    lua_msgpack_incstack(L, pkt, amt);
     return 0;
 }
 
@@ -310,15 +296,7 @@ static int lua_msgpack_pack_subpkt(lua_State *L){
 		amt = mp_pack(L, pkt, 2, 2);
 	}
 
-	// inc stack
-	if (pkt->wrap_stack_p > 0) {
-		uint8_t curIdx = pkt->wrap_stack_p - 1;
-		if (pkt->stacks[curIdx].len >= 0xffff) {
-			lua_msgpack_error(L,"Pre pack wrap array max!!!");
-		}
-		// 当前层元素数量+amt
-		pkt->stacks[curIdx].len += amt;
-	}
+	lua_msgpack_incstack(L, pkt, amt);
 	return 0;
 }
 
@@ -376,6 +354,55 @@ static int lua_msgpack_reread(lua_State *L){
 	return 0;
 }
 
+static int lua_msgpack_prepack_uint(lua_State *L){
+	mp_buf* pkt = lua_tompbuf(L,1);
+	if (!pkt) {
+		lua_msgpack_error(L,"MessagePack prePackUint needs a msgpack.");
+		return 0;
+	}
+
+	int cpos = pkt->len;
+	unsigned char b[5] = {0xce, 0, 0, 0, 0};
+	mp_buf_append(L, pkt, b, 5);
+	lua_msgpack_incstack(L, pkt, 1);
+	lua_pushnumber(L, cpos);
+	return 1;
+}
+
+static int lua_msgpack_repack_uint(lua_State *L){
+	mp_buf* pkt = lua_tompbuf(L,1);
+	if (!pkt) {
+		lua_msgpack_error(L,"MessagePack rePackUint needs a msgpack.");
+		return 0;
+	}
+
+	int wpos = luaL_optinteger(L, 2, 0);
+	if (wpos<0) {
+		lua_msgpack_error(L,"MessagePack rePackUint wpos need>=0.");
+		return 0;
+	}
+
+	unsigned char* b = pkt->b + wpos;
+	if (b[0] == 0xce ) {
+		uint32_t n = lua_tonumber(L,3);
+		mp_replace_uint32(pkt->b, n);
+	} else {
+		lua_msgpack_error(L, "Bad data format<uint32> in replace pos.");
+	}
+
+	return 0;
+}
+
+static int lua_msgpack_getsize(lua_State *L){
+	mp_buf* pkt = lua_tompbuf(L,1);
+	if (!pkt) {
+		lua_msgpack_error(L,"MessagePack getSize needs a msgpack.");
+		return 0;
+	}
+	lua_pushnumber(L, pkt->len + pkt->free);
+	return 1;
+}
+
 static void lua_reg_msgpacket_meta(lua_State *L) {
 	luaL_newmetatable(L, MSGPACKET_META_NAME);
 
@@ -401,6 +428,9 @@ static void lua_reg_msgpacket_meta(lua_State *L) {
 	__inject("unpackPacket", lua_msgpack_unpack_subpkt)
 	__inject("reset", lua_msgpack_reset)
 	__inject("reread", lua_msgpack_reread)
+	__inject("getSize", lua_msgpack_getsize)
+	__inject("prePackUint", lua_msgpack_prepack_uint)
+	__inject("rePackUint", lua_msgpack_repack_uint)
 	#undef __inject
 
 	lua_pop(L, 1);
