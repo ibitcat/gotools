@@ -14,6 +14,8 @@
 
 ## 使用
 
-直接运行`xlsxparse.bat`，生成ts配置时，需要配合`t-xlsx/ConfigParser.ts`。
+- 运行`xlsx2lua.bat`，生成lua配置
+- 预先`xlsx2ts.bat`，生成typescript配置，需要配合`t-xlsx/ConfigParser.ts`
+
 
 ![参数](xlsxparse.png)
