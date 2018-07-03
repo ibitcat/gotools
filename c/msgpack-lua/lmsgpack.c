@@ -385,7 +385,7 @@ static int lua_msgpack_repack_uint(lua_State *L){
 	unsigned char* b = pkt->b + wpos;
 	if (b[0] == 0xce ) {
 		uint32_t n = lua_tonumber(L,3);
-		mp_replace_uint32(pkt->b, n);
+		mp_replace_uint32(b, n);
 	} else {
 		lua_msgpack_error(L, "Bad data format<uint32> in replace pos.");
 	}

@@ -30,8 +30,12 @@ typedef struct mp_buf {
 	uint8_t wrap_stack_p; //当前层数
 } mp_buf;
 
-#define mp_buf_get_write_pos(buf) buf->len
-#define mp_encode_array16(b, n) b[1] = (n & 0xff00) >> 8; b[2] = n & 0xff
+
+#define mp_replace_array16(b, n) b[1] = (n & 0xff00) >> 8; b[2] = n & 0xff
+#define mp_replace_uint32(b, n) b[1] = (n & 0xff000000) >> 24; \
+								b[2] = (n & 0xff0000) >> 16;   \
+								b[3] = (n & 0xff00) >> 8;      \
+								b[4] = n & 0xff
 
 mp_buf *mp_buf_new(lua_State *L);
 void mp_buf_free(lua_State *L, mp_buf *buf);
