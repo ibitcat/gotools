@@ -3,13 +3,14 @@
 local _mathRandom = math.random
 local _mathFloor  = math.floor
 
-oo.class("Brain", "AI")
+oo.class("Brain")
 function Brain:__init(owner, name)
 	assert(owner)
 	assert(name)
-	AI.__init(self, owner, name)
 
+	self._owner = owner
 	self._bt = nil					--大脑的行为树
+	self._aiName = name 			--大脑名字
 	self._thinkTimerId = nil		--大脑思考的定时器
 	self._lastThinkTime = 0			--大脑上一次思考的时间戳（ms）
 	self._thinkVersion = 0			--大脑思考版本号
@@ -216,7 +217,7 @@ function Brain:think()
 		self._thinkTimerId = self._owner:addTimerListener(self, "think", tick)
 	else
 		--休眠
-		log("大脑休眠, objId=%d, aiRangeAmt=%d", self._owner:getObjId(), self._aiRangeAmt or -1)
+		--log("大脑休眠, objId=%d, aiRangeAmt=%d", self._owner:getObjId(), self._aiRangeAmt or -1)
 	end
 end
 

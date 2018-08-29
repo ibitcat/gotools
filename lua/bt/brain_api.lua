@@ -1,55 +1,51 @@
--- ai api
+-- 大脑的api，这些api与具体的项目有耦合，所以单独拆出来
+-- 如果需要移植，这个api是 非必要的
 -- 这个文件里面的接口是action调用的
 
 local _mathRandom = math.random
 
-oo.class("AI")
-function AI:__init(owner, name)
-	assert(name)
-	self._owner = owner
-	self._aiName = name
-	self._state = nil
-
-	self._currentTarget	= nil --ai这一次思考的可攻击目标
-	self._scannedTarget = nil --主动怪搜索到的可攻击目标
-	self._attackTarget  = nil --随机到的攻击目标
+function Brain:initApi()
+	self._state = nil 			--大脑的行为状态（状态机）
+	self._currentTarget	= nil 	--ai这一次思考的可攻击目标
+	self._scannedTarget = nil 	--主动怪搜索到的可攻击目标
+	self._attackTarget  = nil 	--随机到的攻击目标
 	self._selectTargetVersion = nil
 end
 
-function AI:getConfig()
+function Brain:getConfig()
 	return self._owner:getConfig()
 end
 
-function AI:setValue(name, val)
+function Brain:setValue(name, val)
 	self._blackboard[name] = val
 end
 
-function AI:getValue(name)
+function Brain:getValue(name)
 	return self._blackboard[name]
 end
 
-function AI:getState()
+function Brain:getState()
 	return self._state
 end
 
-function AI:setState(s)
+function Brain:setState(s)
 	self._state = s
 end
 
-function AI:getThinkType()
+function Brain:getThinkType()
 	local cnf = self:getConfig()
 	return cnf and cnf.thinkType
 end
 
 -- 技能是否冷却完
-function AI:skillCoolDowned(skillId)
+function Brain:skillCoolDowned(skillId)
 	if skillId then
 		return not self._owner._skillCT:hasCd(skillId)
 	end
 end
 
 -- 目标是否在范围内
-function AI:isInRange(target, distance)
+function Brain:isInRange(target, distance)
 	if not target or not target:isValid() or target:isDead()
 		or not SkillTargetSelector.canBeTarget(self._owner, target)
 		or not self:isTargetInTraceRange(target) then
@@ -65,7 +61,7 @@ function AI:isInRange(target, distance)
 end
 
 -- 目标是否在我的追踪范围内
-function AI:isTargetInTraceRange(target)
+function Brain:isTargetInTraceRange(target)
 	local bx, by
 	local cnf = self:getConfig()
 	if cnf.basePoint == 1 then
@@ -82,7 +78,7 @@ function AI:isTargetInTraceRange(target)
 end
 
 -- 在索敌范围内搜索敌人
-function AI:selectEnemyInScanRange()
+function Brain:selectEnemyInScanRange()
 	local target
 	local minDis = 0xffffffff
 	local yes, dis
@@ -128,7 +124,7 @@ function AI:selectEnemyInScanRange()
 end
 
 -- 从攻击者中随机选择一个做个目标
-function AI:selectTargetFromAttackers()
+function Brain:selectTargetFromAttackers()
 	local list = self._owner:getAttackers()
 	if list then
 		local amt = #list
@@ -140,7 +136,7 @@ function AI:selectTargetFromAttackers()
 end
 
 -- 这个接口返回敌对的对象
-function AI:scanTargetInRange(distance, cb)
+function Brain:scanTargetInRange(distance, cb)
 	local dist
 	local ob
 	local map = self._owner:getMapInstance()
@@ -164,7 +160,7 @@ function AI:scanTargetInRange(distance, cb)
 end
 
 --这个接口返回所有对象(友好/敌对)
-function AI:scanObjsInRange(distance, cb)
+function Brain:scanObjsInRange(distance, cb)
 	local dist
 	local ob
 	local map = self._owner:getMapInstance()
@@ -186,7 +182,7 @@ function AI:scanObjsInRange(distance, cb)
 	return ob, dist
 end
 
-function AI:selectTarget()
+function Brain:selectTarget()
 	if self._selectTargetVersion == self._thinkVersion then
 		return self._currentTarget
 	end

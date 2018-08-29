@@ -3,7 +3,6 @@
 
 oo.single("BrainMgr")
 function BrainMgr:init()
-	--self._evo = EventDispatcher()
 	self._brains = {}
 
 	self._waiters = {}		--等待执行的行为树

@@ -90,10 +90,6 @@ function SkillOnTarget:evaluate()
 		end
 	else
 		local skillDistance = skCon:getSkillDistance(skillId)
-		if skillDistance > CELL_PIXEL then
-			skillDistance = skillDistance - CELL_PIXEL
-		end
-
 		if not owner:isStopping() then --不在定身状态
 			if not owner:isTracing() or owner:getTracingTarget()~=target then
 				--追踪目标
