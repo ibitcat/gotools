@@ -3,19 +3,16 @@
 
 local _print = _G.print
 
--- 树型打印一个 table,不用担心循环引用
--- depthMax 打印层数控制，默认3层
--- excludeKey 排除打印的key
--- excludeType 排除打印的值类型
-table.print = function(root,depthMax,excludeKey,excludeType)
-	assert(type(root)=="table","无法打印非table")
+function _tdump(root, depthMax, excludeKey, excludeType)
+	if type(root) ~= "table" then
+		return root
+	end
+
 	depthMax = depthMax or 3 -- 默认三层
 	local cache = { [root] = "." }
 	local depth = 0
-	local print = _print
-	print("{")
-	local function _dump(t,space,name)
-		local temp = {}
+	local temp = {"{"}
+	local function _dump(t, space, name)
 		for k,v in pairs(t) do
 			local key = tostring(k)
 			if type(k) == "string" then
@@ -24,7 +21,7 @@ table.print = function(root,depthMax,excludeKey,excludeType)
 
 			if type(v) == "table" then
 				if cache[v] then
-					table.insert(temp,space .. "["..key.."]" .." = " .. " {" .. cache[v].."},")
+					table.insert(temp, space .. "["..key.."]" .." = " .. " {" .. cache[v].."},")
 				else
 					local new_key = name .. "." .. tostring(k)
 					cache[v] = new_key .." ->[".. tostring(v) .."]"
@@ -34,15 +31,15 @@ table.print = function(root,depthMax,excludeKey,excludeType)
 					if depth>=depthMax or (excludeKey and excludeKey==k) then
 						table.insert(temp,space .. "["..key.."]" .." = " .. "{ ... }")
 					else
-						local tableStr = _dump(v,space .. (next(t,k) and "|" or " ") .. string.rep(" ",#key<4 and 4 or #key),new_key)
-						if tableStr then		-- 非空table
-							table.insert(temp,space .. "["..key.."]" .." = " .. "{")
-							table.insert(temp, tableStr)
-							table.insert(temp,space .."},")
-						else 						-- 空table
-							table.insert(temp,space .. "["..key.."]" .." = " .. "{ },")
+						local isLast = not next(t, k) --最后一个字段
+						if next(v) then
+							-- 非空table
+							table.insert(temp, space .. "["..key.."]" .." = " .. "{")
+							_dump(v, space .. (isLast and "|" or " ") .. string.rep(" ",#key<4 and 4 or #key),new_key)
+							table.insert(temp, space .. (isLast and "}" or "},"))
+						else
+							table.insert(temp, space .. "["..key.."]" .." = " .. (isLast and "{ }" or "{ },"))
 						end
-						--table.insert(temp, _dump(v,space .. (next(t,k) and "|" or " " ).. string.rep(" ",#key),new_key))
 					end
 					depth = depth -1
 				end
@@ -54,18 +51,30 @@ table.print = function(root,depthMax,excludeKey,excludeType)
 					else
 						v = tostring(v) or "nil"
 					end
-					table.insert(temp,space .. "["..key.."]" .. " = " .. v ..",")
-					--tinsert(temp,"+" .. key .. " [" .. tostring(v).."]")
+					local isLast = not next(t, k) --最后一个字段
+					table.insert(temp, space .. "["..key.."]" .. " = " .. v ..(isLast and "" or ","))
 				end
 			end
 		end
 
-		return #temp>0 and table.concat(temp,"\n") or nil
+		--return #temp>0 and table.concat(temp,"\n") or nil
 	end
-	local allTableString = _dump(root, "    ","")
-	print(allTableString or "")
-	print("}")
-	return allTableString
+	_dump(root, "    ", "")
+	table.insert(temp, "}")
+	return table.concat(temp, "\n")
+end
+
+
+-- 树型打印一个 table,不用担心循环引用
+-- depthMax 打印层数控制，默认3层
+-- excludeKey 排除打印的key
+-- excludeType 排除打印的值类型
+table.print = function(root, depthMax, excludeKey, excludeType)
+	if type(root) ~= "table" then
+		print(root)
+	else
+		table.print(_tdump(root, depthMax, excludeKey, excludeType))
+	end
 end
 
 function Xprint( ... )
