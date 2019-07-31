@@ -35,7 +35,7 @@ function _tdump(root, depthMax, excludeKey, excludeType)
 						if next(v) then
 							-- 非空table
 							table.insert(temp, space .. "["..key.."]" .." = " .. "{")
-							_dump(v, space .. (isLast and "|" or " ") .. string.rep(" ",#key<4 and 4 or #key),new_key)
+							_dump(v, space .. (isLast and " " or "|") .. string.rep(" ",#key<4 and 4 or #key),new_key)
 							table.insert(temp, space .. (isLast and "}" or "},"))
 						else
 							table.insert(temp, space .. "["..key.."]" .." = " .. (isLast and "{ }" or "{ },"))
