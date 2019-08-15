@@ -3,7 +3,7 @@
 
 local _print = _G.print
 
-function _tdump(root, depthMax, excludeKey, excludeType)
+local function _tdump(root, depthMax, excludeKey, excludeType)
 	if type(root) ~= "table" then
 		return root
 	end
@@ -64,6 +64,12 @@ function _tdump(root, depthMax, excludeKey, excludeType)
 	return table.concat(temp, "\n")
 end
 
+local function _getcallstack(level)
+	local info = debug.getinfo(level)
+	if info then
+		return string.format("[file]=%s,[line]=%d]: ", info.source or "?", info.currentline or 0)
+	end
+end
 
 -- 树型打印一个 table,不用担心循环引用
 -- depthMax 打印层数控制，默认3层
@@ -77,27 +83,37 @@ table.print = function(root, depthMax, excludeKey, excludeType)
 	end
 end
 
-function Xprint( ... )
+function xprint( ... )
 	local print = _print
-	for i=1,arg.n do
-		local value = arg[i]
-		if type(value) == "table" then
-			table.print_r(value)
-		elseif type(value) == "string" then
-			print('\"' .. value .. '\"')
+
+	local t = {_getcallstack(3)}
+	local args = {...}
+	local argn = select("#", ...)
+
+	for i=1,argn do
+		local value = args[i]
+		local ty = type(value)
+		if ty == "table" then
+			table.insert(t, _tdump(value))
+		elseif ty == "string" then
+			table.insert(t, '\"' .. value .. '\"')
 		else
-			print(tostring(value))
+			table.insert(t, tostring(value))
 		end
 	end
-	print("\n")
+
+	print(table.concat(t, "\n"))
 end
 
 -- 修改默认的print，支持显示文件名和行数
 local function debug_print(...)
-	local info = debug.getinfo(2)
-	if info then
+	local prefix = _getcallstack(3)
+	if prefix then
 		--local tm = os.date("%Y-%m-%d %H:%M:%S", os.time())
-		_print(string.format("[file]=%s,[line]=%d:",info.source or "?",info.currentline or 0), ...)
+		_print(prefix, ...)
 	end
 end
-print = debug_print
+--print = debug_print
+
+-- test
+--xprint(1, 2, 3, {a=1, b=2, c={100,200}})
