@@ -147,5 +147,25 @@ end
 --print = debug_print
 
 -- test
-local tc = {100,200}
-xprint(1, 2, 3, {a=1, b=2, c=tc, d=tc, e={100,200,300,tc}})
+local cat = {
+	name = "cat",
+	sex = "man",
+	age = 30,
+	phone = {
+		{type=1, number=123},
+		{type=2, number=456},
+	}
+}
+local domi = {
+	name = "domi",
+	sex = "man",
+	age = 30,
+	phone = {
+		{type=1, number=1230000},
+		{type=2, number=3210000},
+	},
+	addrbooks = {cat}
+}
+table.insert(domi.addrbooks, domi)
+
+xprint(1, 2, 3, domi)
