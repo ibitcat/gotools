@@ -3,6 +3,40 @@
 
 local _print = _G.print
 
+-- local var
+local _eqStr = " = "
+local _bktL = "{"
+local _bktR = "}"
+local _tbShort = "{ ... }"
+local _tbEmpty = "{ }"
+
+local function _EscapeKey(key)
+	if type(key) == "string" then
+		key ='\"' .. tostring(key) .. '\"'
+	else
+		key = tostring(key)
+	end
+
+	local brackets = "["..key.."]"
+	return key, brackets
+end
+
+function _Comma(isLast)
+	return isLast and "" or ","
+end
+
+local function _BktR(isLast)
+	return _bktR .. _Comma(isLast)
+end
+
+local function _Space(space, key, isLast)
+	return space .. (isLast and " " or "|") .. string.rep(" ", #key<4 and 4 or #key)
+end
+
+local function _EmptyTable(isLast)
+	return _tbEmpty .. _Comma(isLast)
+end
+
 local function _tdump(root, depthMax, excludeKey, excludeType)
 	if type(root) ~= "table" then
 		return root
@@ -14,45 +48,41 @@ local function _tdump(root, depthMax, excludeKey, excludeType)
 	local temp = {"{"}
 	local function _dump(t, space, name)
 		for k,v in pairs(t) do
-			local key = tostring(k)
-			if type(k) == "string" then
-				key ='\"' .. tostring(k) .. '\"'
-			end
+			local isLast = not next(t, k) --最后一个字段
+			local key, keyBkt = _EscapeKey(k)
 
 			if type(v) == "table" then
 				if cache[v] then
-					table.insert(temp, space .. "["..key.."]" .." = " .. " {" .. cache[v].."},")
+					table.insert(temp, space .. keyBkt .. _eqStr .. _bktL .. cache[v] .. _BktR(isLast))
 				else
 					local new_key = name .. "." .. tostring(k)
-					cache[v] = new_key .." ->[".. tostring(v) .."]"
+					cache[v] = new_key .. " ->[".. tostring(v) .."]"
 
 					-- table 深度判断
 					depth = depth + 1
-					if depth>=depthMax or (excludeKey and excludeKey==k) then
-						table.insert(temp,space .. "["..key.."]" .." = " .. "{ ... }")
+					if depth >= depthMax or (excludeKey and excludeKey==k) then
+						table.insert(temp, space .. keyBkt .. _eqStr .. _tbShort)
 					else
-						local isLast = not next(t, k) --最后一个字段
 						if next(v) then
 							-- 非空table
-							table.insert(temp, space .. "["..key.."]" .." = " .. "{")
-							_dump(v, space .. (isLast and " " or "|") .. string.rep(" ",#key<4 and 4 or #key),new_key)
-							table.insert(temp, space .. (isLast and "}" or "},"))
+							table.insert(temp, space .. keyBkt .. _eqStr .. _bktL)
+							_dump(v, _Space(space, key, isLast), new_key)
+							table.insert(temp, space .. _BktR(isLast))
 						else
-							table.insert(temp, space .. "["..key.."]" .." = " .. (isLast and "{ }" or "{ },"))
+							table.insert(temp, space .. keyBkt .. _eqStr .. _EmptyTable(isLast))
 						end
 					end
 					depth = depth -1
 				end
 			else
 				local vType = type(v)
-				if not excludeType or excludeType~=vType then
+				if not excludeType or excludeType ~= vType then
 					if vType == "string" then
 						v = '\"' .. v .. '\"'
 					else
 						v = tostring(v) or "nil"
 					end
-					local isLast = not next(t, k) --最后一个字段
-					table.insert(temp, space .. "["..key.."]" .. " = " .. v ..(isLast and "" or ","))
+					table.insert(temp, space .. keyBkt .. _eqStr .. v .. _Comma(isLast))
 				end
 			end
 		end
@@ -61,6 +91,7 @@ local function _tdump(root, depthMax, excludeKey, excludeType)
 	end
 	_dump(root, "    ", "")
 	table.insert(temp, "}")
+
 	return table.concat(temp, "\n")
 end
 
@@ -116,4 +147,5 @@ end
 --print = debug_print
 
 -- test
---xprint(1, 2, 3, {a=1, b=2, c={100,200}})
+local tc = {100,200}
+xprint(1, 2, 3, {a=1, b=2, c=tc, d=tc, e={100,200,300,tc}})
