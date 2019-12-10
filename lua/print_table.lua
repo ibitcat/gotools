@@ -9,6 +9,7 @@ local _bktL = "{"
 local _bktR = "}"
 local _tbShort = "{ ... }"
 local _tbEmpty = "{ }"
+local _indent = "    "
 
 local function _EscapeKey(key)
 	if type(key) == "string" then
@@ -29,15 +30,25 @@ local function _BktR(isLast)
 	return _bktR .. _Comma(isLast)
 end
 
-local function _Space(space, key, isLast)
-	return space .. (isLast and " " or "|") .. string.rep(" ", #key<4 and 4 or #key)
+local function _Space(space, key, isLast, noAlignLine)
+	local indent
+	if noAlignLine or isLast then
+		indent = space .. _indent
+	else
+		indent = space .. "|" .. string.rep(" ", 3)
+	end
+	return indent
 end
 
 local function _EmptyTable(isLast)
 	return _tbEmpty .. _Comma(isLast)
 end
 
-local function _tdump(root, depthMax, excludeKey, excludeType)
+local function _Concat(...)
+	return table.concat({...}, "")
+end
+
+local function _tdump(root, depthMax, excludeKey, excludeType, noAlignLine)
 	if type(root) ~= "table" then
 		return root
 	end
@@ -53,23 +64,23 @@ local function _tdump(root, depthMax, excludeKey, excludeType)
 
 			if type(v) == "table" then
 				if cache[v] then
-					table.insert(temp, space .. keyBkt .. _eqStr .. _bktL .. cache[v] .. _BktR(isLast))
+					table.insert(temp, _Concat(space, keyBkt, _eqStr, _bktL, cache[v], _BktR(isLast)))
 				else
 					local new_key = name .. "." .. tostring(k)
 					cache[v] = new_key .. " ->[".. tostring(v) .."]"
 
 					-- table 深度判断
 					depth = depth + 1
-					if depth >= depthMax or (excludeKey and excludeKey==k) then
-						table.insert(temp, space .. keyBkt .. _eqStr .. _tbShort)
+					if (depthMax > 0 and depth >= depthMax) or (excludeKey and excludeKey==k) then
+						table.insert(temp, _Concat(space, keyBkt, _eqStr, _tbShort, _Comma(isLast)))
 					else
 						if next(v) then
 							-- 非空table
-							table.insert(temp, space .. keyBkt .. _eqStr .. _bktL)
-							_dump(v, _Space(space, key, isLast), new_key)
-							table.insert(temp, space .. _BktR(isLast))
+							table.insert(temp, _Concat(space, keyBkt, _eqStr, _bktL))
+							_dump(v, _Space(space, key, isLast, noAlignLine), new_key)
+							table.insert(temp, _Concat(space, _BktR(isLast)))
 						else
-							table.insert(temp, space .. keyBkt .. _eqStr .. _EmptyTable(isLast))
+							table.insert(temp, _Concat(space, keyBkt, _eqStr, _EmptyTable(isLast)))
 						end
 					end
 					depth = depth -1
@@ -82,14 +93,14 @@ local function _tdump(root, depthMax, excludeKey, excludeType)
 					else
 						v = tostring(v) or "nil"
 					end
-					table.insert(temp, space .. keyBkt .. _eqStr .. v .. _Comma(isLast))
+					table.insert(temp, _Concat(space, keyBkt, _eqStr, v, _Comma(isLast)))
 				end
 			end
 		end
 
 		--return #temp>0 and table.concat(temp,"\n") or nil
 	end
-	_dump(root, "    ", "")
+	_dump(root, _indent, "")
 	table.insert(temp, "}")
 
 	return table.concat(temp, "\n")
@@ -103,14 +114,15 @@ local function _getcallstack(level)
 end
 
 -- 树型打印一个 table,不用担心循环引用
--- depthMax 打印层数控制，默认3层
+-- depthMax 打印层数控制，默认3层（-1表示无视层数）
 -- excludeKey 排除打印的key
 -- excludeType 排除打印的值类型
-table.print = function(root, depthMax, excludeKey, excludeType)
+-- noAlignLine 不打印对齐线
+table.print = function(root, depthMax, excludeKey, excludeType, noAlignLine)
 	if type(root) ~= "table" then
 		print(root)
 	else
-		table.print(_tdump(root, depthMax, excludeKey, excludeType))
+		table.print(_tdump(root, depthMax, excludeKey, excludeType, noAlignLine))
 	end
 end
 
@@ -168,4 +180,5 @@ local domi = {
 }
 table.insert(domi.addrbooks, domi)
 
-xprint(1, 2, 3, domi)
+--xprint(1, 2, 3, domi)
+table.print(domi, -1, nil, nil, true)
